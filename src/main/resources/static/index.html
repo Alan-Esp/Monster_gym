@@ -267,8 +267,8 @@
       <div class="card card--pad col" style="gap:18px">
         <h2 class="h2">Datos personales</h2>
         <div class="form-grid">
-          <label class="field"><span class="eyebrow">NOMBRE COMPLETO *</span><input class="input" placeholder="Nombre del socio"></label>
-          <label class="field"><span class="eyebrow">TELÉFONO</span><input class="input" placeholder="Opcional"></label>
+          <label class="field"><span class="eyebrow">NOMBRE COMPLETO *</span><input class="input" id="newName" placeholder="Nombre del socio"></label>
+          <label class="field"><span class="eyebrow">TELÉFONO</span><input class="input" id="newPhone" inputmode="tel" placeholder="Opcional"></label>
         </div>
       </div>
       <div class="card card--pad row" style="gap:20px;flex-wrap:wrap">
@@ -289,7 +289,7 @@
       </div>
       <div class="row" style="gap:10px">
         <button class="btn btn--secondary" style="height:52px" data-go="socios">Cancelar</button>
-        <button class="btn btn--primary" style="height:52px;flex:1" disabled>Registrar socio y cobrar</button>
+        <button class="btn btn--primary" style="height:52px;flex:1" id="newSubmit" disabled>Registrar socio y cobrar</button>
       </div>
     </section>
 
@@ -352,20 +352,20 @@
     <!-- ============ CAJA ============ -->
     <section class="screen" data-screen="caja">
       <div class="page-head">
-        <div class="page-head__titles"><span class="eyebrow">TURNO MATUTINO · SERGIO RAMÍREZ</span><h1 class="h1">Corte de caja</h1></div>
+        <div class="page-head__titles"><span class="eyebrow" id="cajaHead">TURNO MATUTINO · SERGIO RAMÍREZ</span><h1 class="h1">Corte de caja</h1></div>
       </div>
       <div class="wrap-row">
         <div class="grow-3 stack-16">
           <div class="card card--pad col" style="gap:18px">
             <h2 class="h2">Registrar pago</h2>
-            <div class="field"><span class="eyebrow">SOCIO</span><input class="input" placeholder="Buscar socio por nombre o ID"></div>
+            <div class="field"><span class="eyebrow">SOCIO</span><input class="input" id="payMember" autocomplete="off" placeholder="Buscar socio por nombre o ID"></div>
             <div class="field"><span class="eyebrow">PLAN</span><div class="plans" id="payPlans" data-select></div></div>
             <div class="field">
               <span class="eyebrow">MÉTODO</span>
-              <div class="pills pills--dark" data-select>
-                <button class="pill pill--fill is-active">Efectivo</button>
-                <button class="pill pill--fill">Tarjeta</button>
-                <button class="pill pill--fill">Transferencia</button>
+              <div class="pills pills--dark" id="payMethods" data-select>
+                <button class="pill pill--fill is-active" data-method="efectivo">Efectivo</button>
+                <button class="pill pill--fill" data-method="tarjeta">Tarjeta</button>
+                <button class="pill pill--fill" data-method="transferencia">Transferencia</button>
               </div>
             </div>
             <button class="btn btn--primary btn--lg" id="payBtn" disabled>Cobrar $450</button>

@@ -4,10 +4,22 @@
   const D = window.GYM_DATA;
   const $ = (sel, root = document) => root.querySelector(sel);
   const $$ = (sel, root = document) => Array.from(root.querySelectorAll(sel));
-  const money = n => '$' + n.toLocaleString('es-MX');
+  // money recibe pesos; lo que viene de la API (centavos) se convierte con pesos() al mostrar
+  const money = n => '$' + n.toLocaleString('es-MX', { minimumFractionDigits: Number.isInteger(n) ? 0 : 2, maximumFractionDigits: 2 });
+  const pesos = cents => cents / 100;
   const initials = name => name.split(' ').map(w => w[0]).slice(0, 2).join('');
   const STATUS = { a: 'Activa', p: 'Por vencer', v: 'Vencida' };
+  const STATUS_K = { activa: 'a', por_vencer: 'p', vencida: 'v' };
+  const METHOD_LABEL = { efectivo: 'Efectivo', tarjeta: 'Tarjeta', transferencia: 'Transferencia' };
   const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const fmtPhone = p => p ? p.replace(/^(\d{2})(\d{4})(\d{4})$/, '$1 $2 $3') : '—';
+  const MONTHS = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
+  // '2026-10-28' → '28 oct' (con año corto si no es el actual: '14 mar 27')
+  function fmtDay(iso) {
+    if (!iso) return '—';
+    const [y, m, d] = iso.split('-').map(Number);
+    return d + ' ' + MONTHS[m - 1] + (y !== new Date().getFullYear() ? ' ' + String(y).slice(2) : '');
+  }
 
   /* ---------- Navegación ---------- */
   const NAV_PARENT = { nuevo: 'socios', cierre: 'caja' };
@@ -16,6 +28,9 @@
     const navKey = NAV_PARENT[screen] || screen;
     $$('#nav .pill').forEach(p => p.classList.toggle('is-active', p.dataset.go === navKey));
     if (screen === 'cierre') renderClose();
+    if (screen === 'socios') loadMembers();
+    if (screen === 'nuevo') resetNewMember();
+    if (screen === 'caja') loadCaja();
     window.scrollTo(0, 0);
   }
 
@@ -29,8 +44,11 @@
   const ROLE_LABEL = { administrador: 'Administrador', recepcion: 'Recepción', entrenador: 'Entrenador' };
   const canOpenShift = me => me.role === 'administrador' || me.role === 'recepcion';
 
+  let currentUser = null;
+
   /* Barra de usuario: nombre, iniciales, rol y turno (datos de /api/me) */
   function renderUser(me) {
+    currentUser = me;
     const first = me.name.split(' ')[0];
     const shiftAt = me.shift ? me.shift.openedAt.slice(11, 16) : null;
     const label = [me.name, ROLE_LABEL[me.role] || me.role, shiftAt ? 'Turno desde ' + shiftAt : 'Sin turno'].join(' · ');
@@ -48,6 +66,7 @@
 
   function enterApp(me) {
     renderUser(me);
+    loadPlans();
     if (!me.shift && canOpenShift(me)) { showGate('apertura'); return; }
     showGate(null);
     go('inicio');
@@ -166,7 +185,8 @@
     const el = e.target.closest('[data-go]');
     if (!el) return;
     e.preventDefault();
-    if (el.dataset.filter) setMemberFilter(el.dataset.filter);
+    if (el.dataset.filter) memberFilter = el.dataset.filter;
+    if (el.dataset.memberId) cajaMember = shownMembers.get(Number(el.dataset.memberId)) || null;
     go(el.dataset.go);
   });
 
@@ -297,30 +317,48 @@
   }
 
   /* ---------- Socios ---------- */
-  const FILTERS = { Todos: null, Activos: 'a', 'Por vencer': 'p', Vencidos: 'v' };
+  // Pestaña → valor de status en la API (counts usa la misma clave)
+  const FILTERS = { Todos: null, Activos: 'activa', 'Por vencer': 'por_vencer', Vencidos: 'vencida' };
   let memberFilter = 'Todos';
-  function setMemberFilter(f) { memberFilter = f; renderMembers(); }
-  function renderMembers() {
-    const q = $('#memberSearch').value.trim().toLowerCase().replace(/ /g, '');
-    $('#membersTotal').textContent = D.members.length;
+  let memberRequest = 0;
+  const shownMembers = new Map(); // id → ítem mostrado, para preseleccionarlo en Caja
+  function setMemberFilter(f) { memberFilter = f; loadMembers(); }
+
+  async function loadMembers() {
+    const req = ++memberRequest;
+    try {
+      const data = await API.members.list({ q: $('#memberSearch').value.trim(), status: FILTERS[memberFilter] });
+      if (req === memberRequest) renderMembers(data); // ignora respuestas viejas
+    } catch (err) {
+      if (req === memberRequest && err.status !== 401) {
+        $('#membersTable').innerHTML = `<div class="empty">${esc(err.message)}</div>`;
+      }
+    }
+  }
+
+  /* data: respuesta de GET /api/members */
+  function renderMembers(data) {
+    shownMembers.clear();
+    data.items.forEach(m => shownMembers.set(m.id, m));
+    $('#membersTotal').textContent = data.registered;
     $('#memberFilters').innerHTML = Object.keys(FILTERS).map(l => {
-      const n = FILTERS[l] ? D.members.filter(m => m.k === FILTERS[l]).length : D.members.length;
+      const n = data.counts[FILTERS[l] || 'todos'];
       return `<button class="pill pill--tall${l === memberFilter ? ' is-active' : ''}" data-filter-pick="${l}">${l}<span class="pill__count">${n}</span></button>`;
     }).join('');
-    const list = D.members.filter(m =>
-      (!FILTERS[memberFilter] || m.k === FILTERS[memberFilter]) &&
-      (!q || m.name.toLowerCase().replace(/ /g, '').includes(q) || m.id.includes(q) || m.phone.replace(/ /g, '').includes(q)));
-    $('#membersTable').innerHTML = list.length ? list.map(m => `
+    $('#membersTable').innerHTML = data.items.length ? data.items.map(m => {
+      const k = STATUS_K[m.status];
+      return `
       <div class="table__row cols-socios">
-        <span class="cell-person"><span class="avatar">${initials(m.name)}</span><span class="ellipsis">${esc(m.name)}</span></span>
-        <span class="cell-mono">#${m.id}</span>
-        <span class="cell-soft">${m.phone}</span>
-        <span class="cell-soft">${m.plan}</span>
-        <span class="cell-mono" style="color:var(--muted-2)">${m.exp}</span>
-        <span><span class="chip chip--${m.k}">${STATUS[m.k]}</span></span>
-        <button class="btn-sm" data-go="caja">Cobrar</button>
-      </div>`).join('') : '<div class="empty">No se encontraron socios</div>';
-    $('#membersCount').textContent = list.length;
+        <span class="cell-person"><span class="avatar">${esc(initials(m.fullName))}</span><span class="ellipsis">${esc(m.fullName)}</span></span>
+        <span class="cell-mono">#${esc(m.number)}</span>
+        <span class="cell-soft">${fmtPhone(m.phone)}</span>
+        <span class="cell-soft">${esc(m.plan || '—')}</span>
+        <span class="cell-mono" style="color:var(--muted-2)">${fmtDay(m.validUntil)}</span>
+        <span><span class="chip chip--${k}">${STATUS[k]}</span></span>
+        <button class="btn-sm" data-go="caja" data-member-id="${m.id}">Cobrar</button>
+      </div>`;
+    }).join('') : '<div class="empty">No se encontraron socios</div>';
+    $('#membersCount').textContent = data.total;
   }
 
   /* ---------- Visitas ---------- */
@@ -369,29 +407,183 @@
   }
 
   /* ---------- Planes (Nuevo socio / Caja) ---------- */
-  function planButtons(selected) {
-    return D.plans.map(p => `
-      <button class="plan${p.name === selected ? ' is-active' : ''}" data-plan="${p.name}">
-        <span class="plan__name">${p.name}</span><span class="plan__price">${money(p.price)}</span>
+  let plans = []; // GET /api/plans
+  const defaultPlanId = () => (plans.find(p => p.name === 'Mensual') || plans[0] || {}).id;
+
+  async function loadPlans() {
+    try {
+      plans = await API.plans.list();
+      $('#newPlans').innerHTML = planButtons(plans, defaultPlanId());
+      $('#payPlans').innerHTML = planButtons(plans, cajaPlanId || defaultPlanId());
+    } catch (err) { /* sin sesión o sin conexión: se reintenta al entrar a cada pantalla */ }
+  }
+
+  function planButtons(list, selectedId) {
+    return list.map(p => `
+      <button class="plan${p.id === selectedId ? ' is-active' : ''}" data-plan-id="${p.id}">
+        <span class="plan__name">${esc(p.name)}</span><span class="plan__price">${money(pesos(p.priceCents))}</span>
       </button>`).join('');
   }
 
-  /* ---------- Caja ---------- */
-  function renderCaja() {
-    $('#payPlans').innerHTML = planButtons('Mensual');
-    $('#newPlans').innerHTML = planButtons('Mensual');
-    $('#paymentsList').innerHTML = D.payments.map(p => `
-      <div class="list-row" style="padding:10px 0">
-        <span class="list-row__time">${p.time}</span>
-        <span class="ellipsis" style="flex:1">${esc(p.name)}</span>
-        <span class="pay-row__plan">${p.plan}</span>
-        <span class="pay-row__method">${p.method}</span>
-        <span class="pay-row__amount">${money(p.amount)}</span>
-      </div>`).join('');
-    $('#planCounts').innerHTML = ['Mensual', 'Quincenal', 'Semanal'].map((l, i) => `
-      <div class="count"><span class="count__n"${i === 0 ? ' style="color:var(--lime)"' : ''}>${D.payments.filter(p => p.plan === l).length}</span><span class="count__label">${l}</span></div>`).join('');
-    $('#payCount').textContent = D.payments.length;
+  /* ---------- Nuevo socio ---------- */
+  function updateNewSubmit() {
+    const withPlan = $('#withPlan').classList.contains('is-on');
+    const btn = $('#newSubmit');
+    btn.textContent = withPlan ? 'Registrar socio y cobrar' : 'Registrar socio';
+    btn.disabled = !$('#newName').value.trim();
   }
+  function resetNewMember() {
+    ['#newName', '#newPhone'].forEach(s => { $(s).value = ''; $(s).setCustomValidity(''); });
+    $('#withPlan').classList.add('is-on');
+    $('#newPlans').style.display = '';
+    if (plans.length) $('#newPlans').innerHTML = planButtons(plans, defaultPlanId());
+    else loadPlans();
+    updateNewSubmit();
+  }
+  $('#newName').addEventListener('input', e => { e.target.setCustomValidity(''); updateNewSubmit(); });
+  $('#newPhone').addEventListener('input', e => e.target.setCustomValidity(''));
+  $('#newSubmit').addEventListener('click', async e => {
+    const btn = e.target;
+    const withPlan = $('#withPlan').classList.contains('is-on');
+    const planBtn = $('#newPlans .plan.is-active');
+    if (withPlan && !planBtn) { alert('Elige el plan de la membresía.'); return; }
+    btn.disabled = true;
+    try {
+      const res = await API.members.create({ fullName: $('#newName').value, phone: $('#newPhone').value.trim() || null });
+      if (withPlan) {
+        // Se abre Caja con el socio y el plan elegidos; ahí se escoge el método y se cobra
+        cajaMember = res.member;
+        cajaPlanId = Number(planBtn.dataset.planId);
+        go('caja');
+      } else {
+        go('socios');
+      }
+    } catch (err) {
+      const f = err.fields || {};
+      if (f.fullName || f.phone) {
+        const input = f.fullName ? $('#newName') : $('#newPhone');
+        input.setCustomValidity(f.fullName || f.phone);
+        input.reportValidity();
+      } else if (err.status !== 401) {
+        alert(err.message);
+      }
+    } finally {
+      updateNewSubmit();
+    }
+  });
+
+  /* ---------- Caja ---------- */
+  let cajaMember = null;  // { id, number, fullName, status }
+  let cajaPlanId = null;
+  let cajaReady = false;  // hay turno abierto y el rol puede cobrar
+
+  const memberLabel = m => `#${m.number} · ${m.fullName} · ${STATUS[STATUS_K[m.status]]}`;
+  function selectMember(m) {
+    cajaMember = m;
+    const input = $('#payMember');
+    input.value = memberLabel(m);
+    input.setCustomValidity('');
+    updatePayBtn();
+  }
+  function updatePayBtn() {
+    const plan = plans.find(p => p.id === cajaPlanId);
+    const btn = $('#payBtn');
+    btn.textContent = 'Cobrar ' + (plan ? money(pesos(plan.priceCents)) : '');
+    btn.disabled = !(cajaReady && cajaMember && plan);
+  }
+
+  async function loadCaja() {
+    if (!plans.length) await loadPlans();
+    if (!cajaPlanId) cajaPlanId = defaultPlanId();
+    if (!currentUser || !canOpenShift(currentUser)) {
+      cajaReady = false;
+      renderCaja([], null, 'Tu rol no puede cobrar.');
+    } else {
+      try {
+        const [payments, summary] = await Promise.all([API.payments.currentShift(), API.shifts.current()]);
+        cajaReady = true;
+        renderCaja(payments, summary);
+      } catch (err) {
+        cajaReady = false;
+        if (err.status === 401) return;
+        renderCaja([], null, err.code === 'SIN_TURNO' ? 'Abre un turno para cobrar.' : err.message);
+      }
+    }
+    if (cajaMember) selectMember(cajaMember); else updatePayBtn();
+  }
+
+  /* payments: GET /api/payments?shift=current · summary: GET /api/shifts/current (null si no hay turno) */
+  function renderCaja(payments, summary, notice) {
+    const root = $('[data-screen="caja"]');
+    $('#cajaHead').textContent = summary
+      ? `TURNO · ${summary.employeeName.toUpperCase()} · DESDE ${summary.openedAt.slice(11, 16)}`
+      : `${(currentUser ? currentUser.name : '').toUpperCase()} · SIN TURNO ABIERTO`;
+    $('#payPlans').innerHTML = planButtons(plans, cajaPlanId);
+    $('#paymentsList').innerHTML = notice ? `<div class="empty">${esc(notice)}</div>`
+      : !payments.length ? '<div class="empty">Aún no hay pagos en este turno</div>'
+      : payments.map(p => `
+      <div class="list-row" style="padding:10px 0">
+        <span class="list-row__time">${p.paidAt.slice(11, 16)}</span>
+        <span class="ellipsis" style="flex:1">${esc(p.member.fullName)}</span>
+        <span class="pay-row__plan">${esc(p.plan.name)}</span>
+        <span class="pay-row__method">${p.voidedAt ? 'Cancelado' : METHOD_LABEL[p.method]}</span>
+        <span class="pay-row__amount">${money(pesos(p.amountCents))}</span>
+      </div>`).join('');
+
+    const byPlan = summary ? summary.memberships.byPlan : [];
+    const counts = plans.map(p => (byPlan.find(b => b.plan === p.name) || { count: 0 }).count);
+    const top = Math.max(...counts, 0);
+    $('#planCounts').innerHTML = plans.map((p, i) => `
+      <div class="count"><span class="count__n"${top > 0 && counts[i] === top ? ' style="color:var(--lime)"' : ''}>${counts[i]}</span><span class="count__label">${esc(p.name)}</span></div>`).join('');
+    $('#payCount').textContent = summary ? summary.memberships.count : 0;
+    const inc = { mem: summary ? summary.memberships.totalCents : 0, refri: summary ? summary.fridge.totalCents : 0 };
+    inc.total = inc.mem + inc.refri;
+    Object.keys(inc).forEach(k => $$(`[data-inc="${k}"]`, root).forEach(el => { el.textContent = money(pesos(inc[k])); }));
+  }
+
+  async function findCajaMember() {
+    const input = $('#payMember');
+    const q = input.value.trim();
+    if (!q || cajaMember) return;
+    try {
+      const data = await API.members.list({ q });
+      const digits = q.replace(/\D/g, '');
+      const exact = digits && digits.length === q.replace(/[#\s]/g, '').length
+        ? data.items.find(m => m.number === digits.padStart(4, '0')) : null;
+      if (exact || data.items.length === 1) { selectMember(exact || data.items[0]); return; }
+      input.setCustomValidity(data.total === 0 ? 'No se encontró ningún socio.'
+        : `${data.total} socios coinciden: escribe más o usa el número de socio.`);
+      input.reportValidity();
+    } catch (err) {
+      if (err.status !== 401) alert(err.message);
+    }
+  }
+  $('#payMember').addEventListener('input', e => {
+    e.target.setCustomValidity('');
+    if (cajaMember && e.target.value !== memberLabel(cajaMember)) { cajaMember = null; updatePayBtn(); }
+  });
+  $('#payMember').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); findCajaMember(); } });
+  $('#payMember').addEventListener('change', findCajaMember);
+
+  $('#payBtn').addEventListener('click', async e => {
+    const btn = e.target;
+    const method = ($('#payMethods .pill.is-active') || {}).dataset?.method || 'efectivo';
+    btn.disabled = true;
+    try {
+      const r = await API.payments.create({ memberId: cajaMember.id, planId: cajaPlanId, method });
+      alert(`Cobro registrado · Folio ${r.folio}\n${r.member.fullName} · ${r.plan.name}\n`
+        + `Vigencia: ${fmtDay(r.startsOn)} al ${fmtDay(r.endsOn)}\n`
+        + `Total: ${money(pesos(r.amountCents))} · ${METHOD_LABEL[r.method]}`);
+      cajaMember = null;
+      $('#payMember').value = '';
+      // El método vuelve a Efectivo para no repetir por error el del cobro anterior
+      $$('#payMethods .pill').forEach(b => b.classList.toggle('is-active', b.dataset.method === 'efectivo'));
+      await loadCaja();
+    } catch (err) {
+      if (err.status !== 401) alert(err.message);
+      updatePayBtn();
+    }
+  });
 
   /* ---------- Admin ---------- */
   function renderAdmin() {
@@ -432,8 +624,8 @@
       if (plan) {
         $$('.plan', plan.parentElement).forEach(p => p.classList.toggle('is-active', p === plan));
         if (plan.parentElement.id === 'payPlans') {
-          const price = D.plans.find(p => p.name === plan.dataset.plan).price;
-          $('#payBtn').textContent = 'Cobrar ' + money(price);
+          cajaPlanId = Number(plan.dataset.planId);
+          updatePayBtn();
         }
         return;
       }
@@ -457,9 +649,14 @@
       if (e.target.closest('#withPlan')) {
         const on = $('#withPlan').classList.toggle('is-on');
         $('#newPlans').style.display = on ? '' : 'none';
+        updateNewSubmit();
       }
     });
-    $('#memberSearch').addEventListener('input', renderMembers);
+    let searchTimer;
+    $('#memberSearch').addEventListener('input', () => {
+      clearTimeout(searchTimer);
+      searchTimer = setTimeout(loadMembers, 300);
+    });
   }
 
   /* ---------- Inicio de la app ---------- */
@@ -470,10 +667,8 @@
   renderHome();
   initCarousel();
   renderAccess();
-  renderMembers();
   renderVisits();
   renderPos();
-  renderCaja();
   renderAdmin();
   renderDenoms();
   bindSelections();

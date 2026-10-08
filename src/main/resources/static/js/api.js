@@ -66,6 +66,27 @@
       open: openingCashCents => request('POST', '/api/shifts/open', { openingCashCents }),
       current: () => request('GET', '/api/shifts/current'),
       close: countedCashCents => request('POST', '/api/shifts/close', { countedCashCents })
+    },
+    members: {
+      // params: { q, status, page }; los vacíos no se envían
+      list: (params = {}) => {
+        const qs = new URLSearchParams();
+        Object.entries(params).forEach(([k, v]) => { if (v !== undefined && v !== null && v !== '') qs.set(k, v); });
+        const s = qs.toString();
+        return request('GET', '/api/members' + (s ? '?' + s : ''));
+      },
+      get: id => request('GET', '/api/members/' + encodeURIComponent(id)),
+      create: data => request('POST', '/api/members', data),
+      update: (id, data) => request('PUT', '/api/members/' + encodeURIComponent(id), data)
+    },
+    plans: {
+      list: () => request('GET', '/api/plans'),
+      updatePrice: (id, priceCents) => request('PUT', '/api/plans/' + encodeURIComponent(id), { priceCents })
+    },
+    payments: {
+      create: data => request('POST', '/api/payments', data),
+      currentShift: () => request('GET', '/api/payments?shift=current'),
+      void: (id, reason) => request('POST', '/api/payments/' + encodeURIComponent(id) + '/void', { reason })
     }
   };
 })();
