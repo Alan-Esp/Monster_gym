@@ -65,7 +65,31 @@
     shifts: {
       open: openingCashCents => request('POST', '/api/shifts/open', { openingCashCents }),
       current: () => request('GET', '/api/shifts/current'),
-      close: countedCashCents => request('POST', '/api/shifts/close', { countedCashCents })
+      close: (countedCashCents, notes) => request('POST', '/api/shifts/close', { countedCashCents, notes })
+    },
+    products: {
+      list: () => request('GET', '/api/products'),
+      // reason: reabasto (suma), merma (resta) o ajuste (con signo)
+      restock: (id, qty, reason) => request('POST', '/api/products/' + encodeURIComponent(id) + '/restock', { qty, reason })
+    },
+    sales: {
+      create: data => request('POST', '/api/sales', data),
+      currentShift: () => request('GET', '/api/sales?shift=current'),
+      void: (id, reason) => request('POST', '/api/sales/' + encodeURIComponent(id) + '/void', { reason })
+    },
+    employees: {
+      list: () => request('GET', '/api/employees'),
+      create: data => request('POST', '/api/employees', data),
+      update: (id, data) => request('PUT', '/api/employees/' + encodeURIComponent(id), data),
+      changePin: (id, pin) => request('PUT', '/api/employees/' + encodeURIComponent(id) + '/pin', { pin })
+    },
+    settings: {
+      get: () => request('GET', '/api/settings'),
+      update: data => request('PUT', '/api/settings', data)
+    },
+    reports: {
+      incomeMonthly: (months = 6) => request('GET', '/api/reports/income-monthly?months=' + months),
+      summary: () => request('GET', '/api/reports/summary')
     },
     members: {
       // params: { q, status, page }; los vacíos no se envían

@@ -316,7 +316,7 @@
     <section class="screen" data-screen="pos">
       <div class="page-head">
         <div class="page-head__titles"><span class="eyebrow">PUNTO DE VENTA · REFRI</span><h1 class="h1">Refri</h1></div>
-        <button class="btn btn--secondary">Registrar entrada de stock</button>
+        <button class="btn btn--secondary" id="restockMode">Registrar entrada de stock</button>
       </div>
       <div class="stats stats--sm">
         <div class="card card--lime stat"><span class="stat__label">Vendido hoy</span><span class="stat__value stat__value--md" data-inc="refri">$0</span></div>
@@ -332,14 +332,14 @@
         <div class="grow-1 stack-16">
           <div class="card card--pad-sm stack-14">
             <h2 class="h2">Venta actual</h2>
-            <div class="cart-empty">Agrega productos del refri</div>
+            <div class="cart-empty" id="cartLines">Agrega productos del refri</div>
             <div class="divider"></div>
-            <div class="total-row"><span class="muted" style="font-size:14px">Total</span><span class="total-row__value">$0</span></div>
-            <div class="pills pills--dark" data-select>
-              <button class="pill pill--fill is-active">Efectivo</button>
-              <button class="pill pill--fill">Tarjeta</button>
+            <div class="total-row"><span class="muted" style="font-size:14px">Total</span><span class="total-row__value" id="cartTotal">$0</span></div>
+            <div class="pills pills--dark" id="posMethods" data-select>
+              <button class="pill pill--fill is-active" data-method="efectivo">Efectivo</button>
+              <button class="pill pill--fill" data-method="tarjeta">Tarjeta</button>
             </div>
-            <button class="btn btn--primary" disabled>Cobrar $0</button>
+            <button class="btn btn--primary" id="cartPay" disabled>Cobrar $0</button>
           </div>
           <div class="card card--pad-sm col" style="gap:4px">
             <h2 class="h2" style="margin-bottom:8px">Últimas ventas</h2>
@@ -395,7 +395,7 @@
     <section class="screen" data-screen="cierre">
       <div class="back-head">
         <button class="btn-round btn-round--lg" data-go="caja" aria-label="Volver">←</button>
-        <div class="page-head__titles"><span class="eyebrow">TURNO MATUTINO · SERGIO RAMÍREZ · CAJA 01</span><h1 class="h1">Cierre de turno</h1></div>
+        <div class="page-head__titles"><span class="eyebrow" id="closeHead">TURNO MATUTINO · SERGIO RAMÍREZ · CAJA 01</span><h1 class="h1">Cierre de turno</h1></div>
       </div>
       <div class="stats">
         <div class="card stat"><span class="stat__label">Apertura</span><span class="stat__value stat__value--md" data-opened>--:--</span></div>
@@ -430,7 +430,7 @@
           </div>
           <label class="card card--pad-sm field">
             <span class="eyebrow">OBSERVACIONES</span>
-            <textarea class="input input--area" rows="3" placeholder="Opcional"></textarea>
+            <textarea class="input input--area" id="closeNotes" rows="3" maxlength="500" placeholder="Opcional"></textarea>
           </label>
           <button class="btn btn--primary btn--xl btn--block" id="closeShift">Cerrar turno</button>
         </div>
@@ -452,7 +452,7 @@
       <div class="admin-panel is-active" data-panel="Empleados">
         <div class="card table">
           <div class="table__inner">
-            <div class="table-title"><h2 class="h2">Empleados</h2><button class="btn-sm">Agregar empleado</button></div>
+            <div class="table-title"><h2 class="h2">Empleados</h2><button class="btn-sm" id="addEmployee">Agregar empleado</button></div>
             <div class="table__head cols-emp" style="padding:10px 16px"><span>NOMBRE</span><span>ROL</span><span>TURNO</span><span>ESTADO</span></div>
             <div id="employeesTable"></div>
           </div>
@@ -466,12 +466,12 @@
       <div class="admin-panel" data-panel="Reportes">
         <div class="col" style="gap:12px">
           <div class="stats">
-            <div class="card stat" style="gap:12px"><span class="stat__label">Socios activos</span><span class="stat__value" style="font-size:44px;line-height:0.9">412</span></div>
-            <div class="card stat" style="gap:12px"><span class="stat__label">Altas este mes</span><span class="stat__value" style="font-size:44px;line-height:0.9">38</span></div>
-            <div class="card stat" style="gap:12px"><span class="stat__label">Tasa de renovación</span><span class="stat__value" style="font-size:44px;line-height:0.9">82%</span></div>
+            <div class="card stat" style="gap:12px"><span class="stat__label">Socios activos</span><span class="stat__value" id="repActive" style="font-size:44px;line-height:0.9">412</span></div>
+            <div class="card stat" style="gap:12px"><span class="stat__label">Altas este mes</span><span class="stat__value" id="repNew" style="font-size:44px;line-height:0.9">38</span></div>
+            <div class="card stat" style="gap:12px"><span class="stat__label">Tasa de renovación</span><span class="stat__value" id="repRenewal" style="font-size:44px;line-height:0.9">82%</span></div>
           </div>
           <div class="card card--pad col" style="gap:20px">
-            <div class="section-head"><h2 class="h2">Ingresos por mes</h2><span class="muted" style="font-size:12px">Octubre en curso</span></div>
+            <div class="section-head"><h2 class="h2">Ingresos por mes</h2><span class="muted" style="font-size:12px" id="repMonthNote">Octubre en curso</span></div>
             <div class="months" id="months"></div>
           </div>
         </div>

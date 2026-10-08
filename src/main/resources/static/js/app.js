@@ -27,7 +27,9 @@
     $$('.screen').forEach(s => s.classList.toggle('is-active', s.dataset.screen === screen));
     const navKey = NAV_PARENT[screen] || screen;
     $$('#nav .pill').forEach(p => p.classList.toggle('is-active', p.dataset.go === navKey));
-    if (screen === 'cierre') renderClose();
+    if (screen === 'cierre') loadClose();
+    if (screen === 'pos') loadPos();
+    if (screen === 'admin') loadAdmin();
     if (screen === 'inicio') loadHome();
     if (screen === 'acceso') loadAccess();
     if (screen === 'visitas') loadVisits();
@@ -63,8 +65,7 @@
     avatar.setAttribute('aria-label', label + '. Cerrar sesión');
     $('.shift-chip').style.display = me.shift ? '' : 'none';
     $('#shiftOpenedAt').textContent = shiftAt || '--:--';
-    // La pantalla de cierre todavía usa data.js; se le pasa la hora real de apertura
-    D.shift.openedAt = me.shift ? new Date(me.shift.openedAt) : null;
+    $('#nav [data-go="admin"]').style.display = me.role === 'administrador' ? '' : 'none';
   }
 
   function enterApp(me) {
@@ -120,7 +121,6 @@
     e.target.disabled = true;
     try {
       await API.shifts.open(pesos * 100);
-      D.shift.openingCash = pesos;
       enterApp(await API.me());
     } catch (err) {
       if (err.status !== 401) alert(err.message);
@@ -128,62 +128,104 @@
       e.target.disabled = false;
     }
   });
-  // El cierre real se conecta en otra fase; por ahora termina la sesión para no dejarla abierta
-  $('#closeShift').addEventListener('click', () => { D.shift.openedAt = null; logout(); });
-
   /* ---------- Cierre de turno ---------- */
   const BILLS = [1000, 500, 200, 100, 50, 20], COINS = [10, 5, 2, 1];
+  let cashCount = {};        // denominación (pesos) → piezas contadas
+  let closeSummary = null;   // GET /api/shifts/current
+  const signedMoney = p => (p > 0 ? '+' : p < 0 ? '−' : '') + money(Math.abs(p));
+  const countedPesos = () => [...BILLS, ...COINS].reduce((a, v) => a + v * (cashCount[v] || 0), 0);
+
   function renderDenoms() {
     const row = v => `
       <div class="denom">
         <span class="denom__face">$${v}</span>
-        <input class="input denom__qty" inputmode="numeric" data-denom="${v}" value="${D.cashCount[v] || 0}">
+        <input class="input denom__qty" inputmode="numeric" data-denom="${v}" value="${cashCount[v] || 0}">
         <span class="denom__sub" data-sub="${v}"></span>
       </div>`;
     $('#denoms').innerHTML =
       '<span class="denoms__group">BILLETES</span>' + BILLS.map(row).join('') +
       '<span class="denoms__group">MONEDAS</span>' + COINS.map(row).join('');
-    $('#denoms').addEventListener('input', e => {
-      const inp = e.target.closest('[data-denom]');
-      if (!inp) return;
-      inp.value = inp.value.replace(/[^0-9]/g, '');
-      D.cashCount[inp.dataset.denom] = parseInt(inp.value, 10) || 0;
-      renderClose();
-    });
   }
-  function renderClose() {
-    const sum = (list, m) => list.filter(p => p.method === m).reduce((a, p) => a + p.amount, 0);
-    const memCash = sum(D.payments, 'Efectivo');
-    const expected = D.shift.openingCash + memCash + D.shift.refriCash;
+  $('#denoms').addEventListener('input', e => {
+    const inp = e.target.closest('[data-denom]');
+    if (!inp) return;
+    inp.value = inp.value.replace(/[^0-9]/g, '');
+    cashCount[inp.dataset.denom] = parseInt(inp.value, 10) || 0;
+    renderClose(closeSummary);
+  });
+
+  async function loadClose() {
+    closeSummary = null;
+    try {
+      closeSummary = await API.shifts.current();
+    } catch (err) {
+      if (err.status === 401) return;
+      alert(err.code === 'SIN_TURNO' ? 'No tienes un turno abierto.' : err.message);
+    }
+    renderClose(closeSummary);
+  }
+
+  /* s: corte parcial de GET /api/shifts/current (null si no hay turno) */
+  function renderClose(s) {
     let counted = 0;
     [...BILLS, ...COINS].forEach(v => {
-      const sub = v * (D.cashCount[v] || 0);
+      const sub = v * (cashCount[v] || 0);
       counted += sub;
       const el = $(`[data-sub="${v}"]`);
       if (el) el.textContent = money(sub);
     });
+    const zero = { efectivo: 0, tarjeta: 0, transferencia: 0 };
+    const memCash = s ? pesos(s.memberships.byMethod.efectivo) : 0;
+    const refriCash = s ? pesos(s.fridge.byMethod.efectivo) : 0;
+    const byMethod = s ? s.byMethod : zero;
+    const expected = s ? pesos(s.expectedCashCents) : 0;
     const diff = counted - expected;
-    const opened = D.shift.openedAt || new Date();
-    const mins = Math.max(0, Math.round((Date.now() - opened.getTime()) / 60000));
+    const opened = s ? new Date(s.openedAt) : null;
+    const mins = opened ? Math.max(0, Math.round((Date.now() - opened.getTime()) / 60000)) : 0;
 
-    $$('[data-opened]').forEach(el => { el.textContent = hhmm(opened); });
+    $('#closeHead').textContent = s
+      ? `TURNO · ${s.employeeName.toUpperCase()} · DESDE ${s.openedAt.slice(11, 16)}` : 'SIN TURNO ABIERTO';
+    $$('[data-opened]').forEach(el => { el.textContent = opened ? hhmm(opened) : '--:--'; });
     $('#shiftDuration').textContent = Math.floor(mins / 60) + ':' + String(mins % 60).padStart(2, '0') + ' h';
-    $('#closePayCount').textContent = D.payments.length;
+    $('#closePayCount').textContent = s ? s.memberships.count + s.fridge.salesCount : 0;
+    const mem = s ? pesos(s.memberships.totalCents) : 0, refri = s ? pesos(s.fridge.totalCents) : 0;
+    renderIncome({ mem, refri, total: mem + refri }, $('[data-screen="cierre"]'));
     $('#countedTotal').textContent = money(counted);
-    $('#closeOpening').textContent = money(D.shift.openingCash);
+    $('#closeOpening').textContent = money(s ? pesos(s.openingCashCents) : 0);
     $('#closeMemCash').textContent = money(memCash);
-    $('#closeRefriCash').textContent = money(D.shift.refriCash);
+    $('#closeRefriCash').textContent = money(refriCash);
     $('#closeExpected').textContent = money(expected);
     $('#closeCounted').textContent = money(counted);
-    $('#closeCard').textContent = money(sum(D.payments, 'Tarjeta') + D.shift.refriCard);
-    $('#closeTransfer').textContent = money(sum(D.payments, 'Transferencia'));
+    $('#closeCard').textContent = money(pesos(byMethod.tarjeta));
+    $('#closeTransfer').textContent = money(pesos(byMethod.transferencia));
 
     const state = diff < 0 ? 'is-short' : diff > 0 ? 'is-over' : '';
     const d = $('#closeDiff'), n = $('#closeDiffNote');
     d.className = 'diff ' + state; n.className = 'diff-note ' + state;
-    d.textContent = (diff > 0 ? '+' : diff < 0 ? '−' : '') + money(Math.abs(diff));
+    d.textContent = signedMoney(diff);
     n.textContent = diff < 0 ? 'Falta efectivo' : diff > 0 ? 'Sobra efectivo' : 'Cuadra';
+    $('#closeShift').disabled = !s;
   }
+
+  $('#closeShift').addEventListener('click', async e => {
+    if (!closeSummary) return;
+    const counted = countedPesos(), expected = pesos(closeSummary.expectedCashCents);
+    if (!confirm(`¿Cerrar el turno?\nEsperado en caja: ${money(expected)}\nContado: ${money(counted)}\n`
+      + `Diferencia: ${signedMoney(counted - expected)}\n\nUn turno cerrado ya no se modifica.`)) return;
+    e.target.disabled = true;
+    try {
+      const r = await API.shifts.close(Math.round(counted * 100), $('#closeNotes').value.trim() || null);
+      alert(`Turno cerrado.\nEsperado: ${money(pesos(r.expectedCashCents))}\nContado: ${money(pesos(r.countedCashCents))}\n`
+        + `Diferencia: ${signedMoney(pesos(r.differenceCents))}`);
+      cashCount = {};
+      $('#closeNotes').value = '';
+      renderDenoms();
+      logout();
+    } catch (err) {
+      if (err.status !== 401) alert(err.message);
+      e.target.disabled = false;
+    }
+  });
   document.addEventListener('click', e => {
     const el = e.target.closest('[data-go]');
     if (!el) return;
@@ -217,11 +259,6 @@
   }
 
   /* ---------- Totales ---------- */
-  function totals() {
-    const mem = D.payments.reduce((a, p) => a + p.amount, 0);
-    const refri = D.products.reduce((a, p) => a + p.sold * p.price, 0);
-    return { mem, refri, total: mem + refri };
-  }
   /* t: { mem, refri, total } en pesos; solo actualiza los totales dentro de root (cada pantalla tiene su fuente) */
   function renderIncome(t, root) {
     $$('[data-inc="total"]', root).forEach(el => { el.textContent = money(t.total); });
@@ -500,33 +537,158 @@
   }
 
   /* ---------- Punto de venta ---------- */
-  function renderPos() {
-    $('#products').innerHTML = D.products.map(p => {
-      const out = p.stock === 0, low = !out && p.stock <= p.min;
+  let products = [];          // GET /api/products
+  const cart = new Map();     // productId → piezas en la venta actual
+  let posReady = false;       // turno abierto y rol que puede vender
+  let restockMode = false;    // "Registrar entrada de stock": los botones de producto suman inventario
+  let posSales = [], posNotice = null;  // última lista de ventas del turno (o aviso)
+
+  async function loadPos() {
+    const canSell = currentUser && canOpenShift(currentUser);
+    let sales = [], notice = null;
+    try {
+      products = await API.products.list();
+    } catch (err) {
+      if (err.status !== 401) alert(err.message);
+      return;
+    }
+    if (!canSell) {
+      notice = 'Tu rol no puede vender.';
+    } else {
+      try {
+        sales = await API.sales.currentShift();
+      } catch (err) {
+        if (err.status === 401) return;
+        notice = err.code === 'SIN_TURNO' ? 'Abre un turno para vender.' : err.message;
+      }
+    }
+    posReady = canSell && !notice;
+    if (!canSell) restockMode = false;
+    // Quita del carrito lo que ya no existe o ya no alcanza
+    for (const [id, qty] of cart) {
+      const p = products.find(x => x.id === id);
+      if (!p || p.stock === 0) cart.delete(id); else if (qty > p.stock) cart.set(id, p.stock);
+    }
+    posSales = sales;
+    posNotice = notice;
+    renderPos(products, posSales, posNotice);
+  }
+
+  /* list: GET /api/products · sales: GET /api/sales?shift=current · notice: aviso en lugar de las ventas */
+  function renderPos(list, sales, notice) {
+    const canSell = currentUser && canOpenShift(currentUser);
+    $('#products').innerHTML = list.map(p => {
+      const out = p.outOfStock, low = !out && p.lowStock;
+      const inCart = cart.get(p.id) || 0;
+      const label = restockMode ? '+ Entrada' : out ? 'Agotado' : inCart >= p.stock ? 'Sin más stock' : inCart ? `Agregar (${inCart})` : 'Agregar';
+      const disabled = restockMode ? false : out || inCart >= p.stock || !posReady;
       return `
       <div class="card product${out ? ' is-out' : low ? ' is-low' : ''}">
         <div class="product__head">
-          <div class="col" style="gap:3px;min-width:0"><span class="product__name">${esc(p.name)}</span><span class="product__size">${p.size}</span></div>
-          <span class="product__price">${money(p.price)}</span>
+          <div class="col" style="gap:3px;min-width:0"><span class="product__name">${esc(p.name)}</span><span class="product__size">${esc(p.size || '')}</span></div>
+          <span class="product__price">${money(pesos(p.priceCents))}</span>
         </div>
         <div class="col" style="gap:8px">
-          <div class="product__meta"><span>Stock <b class="product__stock">${p.stock}</b>/${p.cap}</span><span>Vendido <b>${p.sold}</b></span></div>
-          <div class="product__bar"><i style="width:${Math.round(p.stock / p.cap * 100)}%"></i></div>
+          <div class="product__meta"><span>Stock <b class="product__stock">${p.stock}</b>/${p.capacity}</span><span>Vendido <b>${p.soldToday}</b></span></div>
+          <div class="product__bar"><i style="width:${Math.min(100, Math.round(p.stock / p.capacity * 100))}%"></i></div>
           <span class="product__tag">${out ? 'Agotado' : low ? 'Stock bajo' : ''}</span>
         </div>
-        <button class="product__add"${out ? ' disabled' : ''}>${out ? 'Agotado' : 'Agregar'}</button>
+        <button class="product__add" data-product-id="${p.id}"${disabled ? ' disabled' : ''}>${label}</button>
       </div>`;
     }).join('');
-    $('#soldUnits').textContent = D.products.reduce((a, p) => a + p.sold, 0);
-    $('#stockUnits').textContent = D.products.reduce((a, p) => a + p.stock, 0);
-    $('#lowCount').textContent = D.products.filter(p => p.stock <= p.min).length;
-    $('#salesList').innerHTML = D.sales.map(s => `
+    $('#soldUnits').textContent = list.reduce((a, p) => a + p.soldToday, 0);
+    $('#stockUnits').textContent = list.reduce((a, p) => a + p.stock, 0);
+    $('#lowCount').textContent = list.filter(p => p.lowStock).length;
+    const refri = pesos(list.reduce((a, p) => a + p.soldTodayCents, 0));
+    renderIncome({ mem: 0, refri, total: refri }, $('[data-screen="pos"]'));
+
+    const restockBtn = $('#restockMode');
+    restockBtn.disabled = !canSell;
+    restockBtn.textContent = restockMode ? 'Terminar entrada de stock' : 'Registrar entrada de stock';
+
+    $('#salesList').innerHTML = notice ? `<div class="empty">${esc(notice)}</div>`
+      : !sales.length ? '<div class="empty">Aún no hay ventas en este turno</div>'
+      : sales.map(s => `
       <div class="list-row">
-        <span class="list-row__time">${s.time}</span>
-        <div class="col" style="gap:2px;flex:1;min-width:0"><span class="ellipsis" style="font-size:13px">${esc(s.items)}</span><span style="font-size:11px;color:var(--dim)">${s.pay}</span></div>
-        <span class="mono" style="font-size:13px">${money(s.total)}</span>
+        <span class="list-row__time">${s.createdAt.slice(11, 16)}</span>
+        <div class="col" style="gap:2px;flex:1;min-width:0"><span class="ellipsis" style="font-size:13px">${esc(s.items.map(i => i.qty + '× ' + i.name).join(', '))}</span><span style="font-size:11px;color:var(--dim)">${s.voidedAt ? 'Cancelada' : METHOD_LABEL[s.method]}</span></div>
+        <span class="mono" style="font-size:13px">${money(pesos(s.totalCents))}</span>
       </div>`).join('');
+    renderCart();
   }
+
+  /* Venta actual: líneas dentro del recuadro de la venta */
+  function renderCart() {
+    let total = 0;
+    const lines = [...cart].map(([id, qty]) => {
+      const p = products.find(x => x.id === id);
+      const sub = p.priceCents * qty;
+      total += sub;
+      return `
+      <div class="list-row" style="gap:8px;padding:6px 12px;text-align:left">
+        <span class="ellipsis" style="flex:1;font-size:13px">${esc(p.name)}</span>
+        <button class="btn-round" data-cart-dec="${id}" aria-label="Quitar uno">−</button>
+        <span class="mono" style="width:24px;text-align:center">${qty}</span>
+        <button class="btn-round" data-cart-inc="${id}" aria-label="Agregar uno"${qty >= p.stock ? ' disabled' : ''}>+</button>
+        <span class="mono" style="width:64px;text-align:right;font-size:13px">${money(pesos(sub))}</span>
+      </div>`;
+    });
+    $('#cartLines').innerHTML = lines.length ? lines.join('') : 'Agrega productos del refri';
+    $('#cartTotal').textContent = money(pesos(total));
+    const pay = $('#cartPay');
+    pay.textContent = 'Cobrar ' + money(pesos(total));
+    pay.disabled = !posReady || !cart.size;
+  }
+
+  function changeCart(id, delta) {
+    const p = products.find(x => x.id === id);
+    if (!p) return;
+    const qty = Math.min(p.stock, (cart.get(id) || 0) + delta);
+    if (qty <= 0) cart.delete(id); else cart.set(id, qty);
+    renderPos(products, posSales, posNotice);
+  }
+
+  $('#products').addEventListener('click', async e => {
+    const btn = e.target.closest('[data-product-id]');
+    if (!btn || btn.disabled) return;
+    const id = Number(btn.dataset.productId);
+    if (!restockMode) { changeCart(id, 1); return; }
+    const p = products.find(x => x.id === id);
+    const answer = prompt(`Entrada de stock · ${p.name}\nStock actual: ${p.stock} de ${p.capacity}\n¿Cuántas piezas entran?`);
+    if (answer === null) return;
+    const qty = parseInt(answer, 10);
+    if (!(qty > 0) || String(qty) !== answer.trim()) { alert('Escribe una cantidad entera mayor a cero.'); return; }
+    try {
+      await API.products.restock(id, qty, 'reabasto');
+      loadPos();
+    } catch (err) {
+      if (err.status !== 401) alert(err.message);
+    }
+  });
+  $('#cartLines').addEventListener('click', e => {
+    const dec = e.target.closest('[data-cart-dec]'), inc = e.target.closest('[data-cart-inc]');
+    if (dec) changeCart(Number(dec.dataset.cartDec), -1);
+    if (inc) changeCart(Number(inc.dataset.cartInc), 1);
+  });
+  $('#restockMode').addEventListener('click', () => { restockMode = !restockMode; loadPos(); });
+
+  $('#cartPay').addEventListener('click', async e => {
+    const btn = e.target;
+    const method = ($('#posMethods .pill.is-active') || {}).dataset?.method || 'efectivo';
+    const items = [...cart].map(([productId, qty]) => ({ productId, qty }));
+    btn.disabled = true;
+    try {
+      const s = await API.sales.create({ method, items });
+      alert(`Venta registrada · Folio ${s.folio}\n${s.items.map(i => i.qty + '× ' + i.name).join(', ')}\n`
+        + `Total: ${money(pesos(s.totalCents))} · ${METHOD_LABEL[s.method]}`);
+      cart.clear();
+      $$('#posMethods .pill').forEach(b => b.classList.toggle('is-active', b.dataset.method === 'efectivo'));
+    } catch (err) {
+      if (err.status === 401) return;
+      alert(err.message);  // p. ej. STOCK_INSUFICIENTE: otra caja vendió el último
+    }
+    loadPos();
+  });
 
   /* ---------- Planes (Nuevo socio / Caja) ---------- */
   let plans = []; // GET /api/plans
@@ -695,33 +857,221 @@
   });
 
   /* ---------- Admin ---------- */
-  function renderAdmin() {
-    $('#employeesTable').innerHTML = D.employees.map(e => `
-      <div class="table__row cols-emp">
-        <span class="cell-person"><span class="avatar">${initials(e.name)}</span>${esc(e.name)}</span>
-        <span class="cell-soft">${e.role}</span>
-        <span class="cell-soft">${e.shift}</span>
-        <span><span class="chip ${e.active ? 'chip--a' : 'chip--off'}">${e.active ? 'Activo' : 'Inactivo'}</span></span>
-      </div>`).join('');
-    $('#priceGrid').innerHTML = D.plans.map(p => `
+  const SHIFT_LABELS = ['Matutino', 'Vespertino', 'Nocturno', 'Fin de semana'];
+  const MONTH_NAMES = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre',
+    'Octubre', 'Noviembre', 'Diciembre'];
+  let employees = [];
+  let editingEmployee = null;  // id en edición, 'new' para el alta, null si ninguno
+  let editingPlan = null;
+  let settings = null;
+
+  async function loadAdmin() {
+    if (!currentUser || currentUser.role !== 'administrador') { go('inicio'); return; }
+    try {
+      const [emps, planList, summary, months, cfg] = await Promise.all([API.employees.list(), API.plans.list(),
+        API.reports.summary(), API.reports.incomeMonthly(6), API.settings.get()]);
+      employees = emps;
+      plans = planList;
+      settings = cfg;
+      editingEmployee = editingPlan = null;
+      renderAdmin({ employees, plans, summary, months, settings });
+    } catch (err) {
+      if (err.status !== 401) alert(err.message);
+    }
+  }
+
+  function renderAdmin(d) {
+    renderEmployees(d.employees);
+    renderPrices(d.plans);
+    renderReports(d.summary, d.months);
+    renderSettings(d.settings);
+  }
+
+  /* ----- Empleados: la fila en edición se dibuja como formulario dentro de la misma tabla ----- */
+  function employeeForm(e) {
+    const isNew = !e;
+    e = e || { name: '', username: '', role: 'recepcion', shiftLabel: 'Matutino', active: true };
+    const opt = (value, label, sel) => `<option value="${esc(value)}"${value === sel ? ' selected' : ''}>${esc(label)}</option>`;
+    const shifts = SHIFT_LABELS.includes(e.shiftLabel) || !e.shiftLabel ? SHIFT_LABELS : [e.shiftLabel, ...SHIFT_LABELS];
+    return `
+      <div class="table__row" data-emp-form="${isNew ? 'new' : e.id}" style="display:flex;flex-wrap:wrap;gap:10px;align-items:center">
+        <input class="input" data-f="name" placeholder="Nombre completo" value="${esc(e.name)}" style="flex:2 1 180px">
+        <input class="input" data-f="username" placeholder="Usuario" value="${esc(e.username)}" autocomplete="off" style="flex:1 1 130px">
+        <select class="input" data-f="role" style="flex:1 1 130px">${Object.keys(ROLE_LABEL).map(r => opt(r, ROLE_LABEL[r], e.role)).join('')}</select>
+        <select class="input" data-f="shiftLabel" style="flex:1 1 130px">${shifts.map(s => opt(s, s, e.shiftLabel || 'Matutino')).join('')}</select>
+        ${isNew
+          ? '<input class="input" data-f="pin" type="password" placeholder="PIN o contraseña" autocomplete="new-password" style="flex:1 1 130px">'
+          : `<button class="toggle${e.active ? ' is-on' : ''}" data-f="active" aria-label="Activo" title="Activo"></button>
+             <button class="btn-sm" data-emp-pin="${e.id}">Cambiar PIN</button>`}
+        <button class="btn-sm" data-emp-save>Guardar</button>
+        <button class="btn-sm" data-emp-cancel>Cancelar</button>
+      </div>`;
+  }
+
+  function renderEmployees(list) {
+    const rows = list.map(e => editingEmployee === e.id ? employeeForm(e) : `
+      <div class="table__row cols-emp" data-emp-id="${e.id}" title="Clic para editar" style="cursor:pointer">
+        <span class="cell-person"><span class="avatar">${esc(initials(e.name))}</span><span class="ellipsis">${esc(e.name)} <span class="muted" style="font-size:12px">@${esc(e.username)}</span></span></span>
+        <span class="cell-soft">${ROLE_LABEL[e.role]}</span>
+        <span class="cell-soft">${esc(e.shiftLabel || '—')}</span>
+        <span><span class="chip ${e.locked ? 'chip--v' : e.active ? 'chip--a' : 'chip--off'}">${e.locked ? 'Bloqueado' : e.active ? 'Activo' : 'Inactivo'}</span></span>
+      </div>`);
+    $('#employeesTable').innerHTML = (editingEmployee === 'new' ? employeeForm(null) : '') + rows.join('');
+    const first = $('#employeesTable [data-emp-form] [data-f="name"]');
+    if (first) first.focus();
+  }
+
+  $('#addEmployee').addEventListener('click', () => { editingEmployee = 'new'; renderEmployees(employees); });
+  $('#employeesTable').addEventListener('click', async e => {
+    const row = e.target.closest('[data-emp-id]');
+    if (row && editingEmployee === null) { editingEmployee = Number(row.dataset.empId); renderEmployees(employees); return; }
+    const form = e.target.closest('[data-emp-form]');
+    if (!form) return;
+    const field = f => form.querySelector(`[data-f="${f}"]`);
+    if (e.target.closest('[data-f="active"]')) { field('active').classList.toggle('is-on'); return; }
+    if (e.target.closest('[data-emp-cancel]')) { editingEmployee = null; renderEmployees(employees); return; }
+
+    const pinBtn = e.target.closest('[data-emp-pin]');
+    if (pinBtn) {
+      const pin = prompt('Nuevo PIN o contraseña (mínimo 4 caracteres):');
+      if (pin === null) return;
+      try {
+        await API.employees.changePin(Number(pinBtn.dataset.empPin), pin);
+        alert('PIN actualizado. Si la cuenta estaba bloqueada, ya quedó desbloqueada.');
+        loadAdmin();
+      } catch (err) {
+        if (err.status !== 401) alert((err.fields && err.fields.pin) || err.message);
+      }
+      return;
+    }
+
+    if (!e.target.closest('[data-emp-save]')) return;
+    const isNew = form.dataset.empForm === 'new';
+    const data = { name: field('name').value, username: field('username').value, role: field('role').value,
+      shiftLabel: field('shiftLabel').value };
+    if (isNew) data.pin = field('pin').value; else data.active = field('active').classList.contains('is-on');
+    try {
+      if (isNew) await API.employees.create(data);
+      else await API.employees.update(Number(form.dataset.empForm), data);
+      editingEmployee = null;
+      employees = await API.employees.list();
+      renderEmployees(employees);
+    } catch (err) {
+      if (err.status === 401) return;
+      const bad = Object.keys(err.fields || {}).find(f => field(f));
+      if (bad) { field(bad).setCustomValidity(err.fields[bad]); field(bad).reportValidity(); }
+      else alert(err.message);
+    }
+  });
+  $('#employeesTable').addEventListener('input', e => { if (e.target.setCustomValidity) e.target.setCustomValidity(''); });
+
+  /* ----- Precios: "Editar precio" convierte la tarjeta en un campo ----- */
+  function renderPrices(list) {
+    $('#priceGrid').innerHTML = list.map(p => `
       <div class="card price-card">
-        <div class="section-head" style="align-items:center"><span style="font-size:15px;font-weight:700">${p.name}</span><span class="muted" style="font-size:12px">${p.days} días</span></div>
-        <span class="stat__value" style="font-size:40px;line-height:0.9">${money(p.price)}</span>
-        <button class="btn-sm">Editar precio</button>
+        <div class="section-head" style="align-items:center"><span style="font-size:15px;font-weight:700">${esc(p.name)}</span><span class="muted" style="font-size:12px">${p.days} días</span></div>
+        ${editingPlan === p.id
+          ? `<label class="money-input"><span>$</span><input data-price-input="${p.id}" inputmode="decimal" value="${pesos(p.priceCents)}"></label>
+             <div class="row" style="gap:8px"><button class="btn-sm" data-price-save="${p.id}">Guardar</button><button class="btn-sm" data-price-cancel>Cancelar</button></div>`
+          : `<span class="stat__value" style="font-size:40px;line-height:0.9">${money(pesos(p.priceCents))}</span>
+             <button class="btn-sm" data-price-edit="${p.id}">Editar precio</button>`}
       </div>`).join('');
-    const m = D.monthlyIncome, last = m.length - 1;
-    $('#months').innerHTML = m.map((x, i) => `
-      <div class="month">
-        <span class="month__v">$${x.value}k</span>
-        <div class="month__bar${i === last - 1 ? ' is-best' : i === last ? ' is-current' : ''}" style="height:${Math.round(x.value / 150 * 100)}%"></div>
-        <span class="month__label">${x.label}</span>
+    const input = $('#priceGrid [data-price-input]');
+    if (input) { input.focus(); input.select(); }
+  }
+
+  async function savePrice(id) {
+    const input = $(`#priceGrid [data-price-input="${id}"]`);
+    const value = input.value.trim().replace(',', '.');
+    if (!/^\d+(\.\d{1,2})?$/.test(value)) {
+      input.setCustomValidity('Escribe el precio en pesos, por ejemplo 300 o 299.50.');
+      input.reportValidity();
+      return;
+    }
+    try {
+      await API.plans.updatePrice(id, Math.round(parseFloat(value) * 100));
+      editingPlan = null;
+      plans = await API.plans.list();  // Caja y Nuevo socio usan los mismos planes
+      renderPrices(plans);
+    } catch (err) {
+      if (err.status === 401) return;
+      input.setCustomValidity((err.fields && err.fields.priceCents) || err.message);
+      input.reportValidity();
+    }
+  }
+  $('#priceGrid').addEventListener('click', e => {
+    const edit = e.target.closest('[data-price-edit]'), save = e.target.closest('[data-price-save]');
+    if (edit) { editingPlan = Number(edit.dataset.priceEdit); renderPrices(plans); }
+    if (save) savePrice(Number(save.dataset.priceSave));
+    if (e.target.closest('[data-price-cancel]')) { editingPlan = null; renderPrices(plans); }
+  });
+  $('#priceGrid').addEventListener('input', e => e.target.setCustomValidity(''));
+  $('#priceGrid').addEventListener('keydown', e => {
+    const input = e.target.closest('[data-price-input]');
+    if (input && e.key === 'Enter') savePrice(Number(input.dataset.priceInput));
+    if (input && e.key === 'Escape') { editingPlan = null; renderPrices(plans); }
+  });
+
+  /* ----- Reportes ----- */
+  function renderReports(summary, months) {
+    $('#repActive').textContent = summary.activeMembers;
+    $('#repNew').textContent = summary.newThisMonth;
+    $('#repRenewal').textContent = summary.renewalRate === null ? '—' : summary.renewalRate + '%';
+    $('#repRenewal').title = `De ${summary.expiredLast30Days} socio(s) cuya membresía venció en los últimos 30 días`;
+    const current = months.find(m => m.current);
+    $('#repMonthNote').textContent = current ? MONTH_NAMES[Number(current.month.slice(5)) - 1] + ' en curso' : '';
+    const max = Math.max(...months.map(m => m.totalCents), 1);
+    const past = months.filter(m => !m.current && m.totalCents > 0);
+    const best = past.length ? past.reduce((a, b) => (b.totalCents > a.totalCents ? b : a)) : null;
+    const kilo = c => {
+      const p = pesos(c);
+      return p >= 1000 ? '$' + (p >= 10000 ? Math.round(p / 1000) : (p / 1000).toFixed(1)) + 'k' : money(p);
+    };
+    $('#months').innerHTML = months.map(m => `
+      <div class="month" title="${esc(m.label)}: membresías ${money(pesos(m.membershipsCents))} · refri ${money(pesos(m.fridgeCents))}">
+        <span class="month__v">${kilo(m.totalCents)}</span>
+        <div class="month__bar${m === best ? ' is-best' : m.current ? ' is-current' : ''}" style="height:${Math.round(m.totalCents / max * 100)}%"></div>
+        <span class="month__label">${esc(m.label)}</span>
       </div>`).join('');
-    const s = D.settings;
+  }
+
+  /* ----- Configuración: se guarda al salir del campo (o Enter) y al tocar un interruptor ----- */
+  function renderSettings(s) {
     $('#cfgName').value = s.gymName;
     $('#cfgCapacity').value = s.capacity;
     $('#cfgWarn').value = s.warnDays;
     $$('[data-toggle]').forEach(t => t.classList.toggle('is-on', !!s[t.dataset.toggle]));
   }
+
+  async function saveSetting(input, key, value) {
+    try {
+      settings = await API.settings.update({ [key]: value });
+      input.setCustomValidity('');
+      renderSettings(settings);
+    } catch (err) {
+      if (err.status === 401) return;
+      const message = (err.fields && err.fields[key]) || err.message;
+      if (input.tagName !== 'INPUT') { alert(message); return; }  // interruptores
+      input.setCustomValidity(message);
+      input.reportValidity();
+    }
+  }
+  [['#cfgName', 'gymName', v => v.trim()], ['#cfgCapacity', 'capacity', Number], ['#cfgWarn', 'warnDays', Number]]
+    .forEach(([sel, key, parse]) => {
+      const input = $(sel);
+      input.addEventListener('input', () => input.setCustomValidity(''));
+      input.addEventListener('keydown', e => { if (e.key === 'Enter') input.blur(); });
+      input.addEventListener('change', () => {
+        const raw = input.value.trim();
+        if (key !== 'gymName' && !/^\d+$/.test(raw)) {
+          input.setCustomValidity('Escribe un número entero.');
+          input.reportValidity();
+          return;
+        }
+        if (settings && String(settings[key]) === raw) return;
+        saveSetting(input, key, parse(raw));
+      });
+    });
 
   /* ---------- Controles de selección (estado visual) ---------- */
   function bindSelections() {
@@ -751,8 +1101,9 @@
       }
 
       const tg = e.target.closest('[data-toggle]');
-      if (tg) { D.settings[tg.dataset.toggle] = !D.settings[tg.dataset.toggle]; tg.classList.toggle('is-on'); return; }
+      if (tg) { saveSetting(tg, tg.dataset.toggle, !tg.classList.contains('is-on')); return; }
 
+      // Estado del lector simulado hasta la Fase 6
       if (e.target.closest('#toggleFp')) { D.fingerprintConnected = !D.fingerprintConnected; renderFingerprint(); return; }
 
       if (e.target.closest('#withPlan')) {
@@ -772,11 +1123,8 @@
   tick();
   setInterval(tick, 1000);
   renderFingerprint();
-  // Refri y Cierre siguen con data.js hasta su fase; Inicio, Acceso, Visitas y Caja cargan de la API al abrirse
-  [$('[data-screen="pos"]'), $('[data-screen="cierre"]')].forEach(root => renderIncome(totals(), root));
+  // Cada pantalla carga sus datos de la API al abrirse (ver go)
   initCarousel();
-  renderPos();
-  renderAdmin();
   renderDenoms();
   bindSelections();
 

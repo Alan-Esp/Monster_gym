@@ -50,7 +50,7 @@ Si una instrucción mía contradice estos documentos, avísame antes de continua
 - [x] Fase 2: autenticación, empleados y turnos
 - [x] Fase 3: socios, planes y cobros
 - [x] Fase 4: acceso, visitas e inicio
-- [ ] Fase 5: refri (POS) y admin
+- [x] Fase 5: refri (POS) y admin
 - [ ] Fase 5B: tickets en impresora térmica 58 mm
 - [ ] Fase 6: lector de huella
 - [ ] Fase 7: entrega e instalación
