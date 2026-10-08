@@ -7,7 +7,8 @@ public record Shift(
         String openedAt,
         String closedAt,
         long openingCashCents,
-        Long countedCashCents) {
+        Long countedCashCents,
+        String notes) {
 
     public boolean isOpen() {
         return closedAt == null;

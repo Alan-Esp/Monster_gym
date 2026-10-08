@@ -5,6 +5,7 @@ import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Size;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -36,7 +37,9 @@ public class ShiftController {
             @NotNull(message = "Captura el efectivo contado.")
             @Min(value = 0, message = "El efectivo contado no puede ser negativo.")
             @Max(value = MAX_CASH_CENTS, message = "El efectivo contado es demasiado alto.")
-            Long countedCashCents) {
+            Long countedCashCents,
+            @Size(max = 500, message = "Las observaciones son demasiado largas (máximo 500 caracteres).")
+            String notes) {
     }
 
     private final ShiftService service;
@@ -63,7 +66,7 @@ public class ShiftController {
     @PreAuthorize("hasAnyRole('ADMINISTRADOR', 'RECEPCION')")
     public ShiftSummary close(@AuthenticationPrincipal EmployeePrincipal employee,
                               @Valid @RequestBody CloseRequest body) {
-        return service.close(employee, body.countedCashCents());
+        return service.close(employee, body.countedCashCents(), body.notes());
     }
 
     @GetMapping

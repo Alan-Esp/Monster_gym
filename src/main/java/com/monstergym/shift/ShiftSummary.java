@@ -19,7 +19,8 @@ public record ShiftSummary(
         long totalCents,
         long expectedCashCents,
         Long countedCashCents,
-        Long differenceCents) {
+        Long differenceCents,
+        String notes) {
 
     public record Memberships(int count, long totalCents, Map<String, Long> byMethod, List<PlanLine> byPlan) {
     }

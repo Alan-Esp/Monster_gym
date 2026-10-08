@@ -76,15 +76,29 @@ public abstract class ApiTestBase {
     protected void insertMember(long id, String number, String name, String phone, Integer venceEnDias) {
         jdbc.update("INSERT INTO member (id, number, full_name, phone, joined_on, search_key) "
                 + "VALUES (?, ?, ?, ?, '2026-01-01', ?)", id, number, name, phone, SearchText.key(name));
-        if (venceEnDias == null) return;
+        if (venceEnDias != null) addMembership(id, venceEnDias);
+    }
+
+    /** Agrega al socio una membresía pagada (en el turno viejo 900) que termina en hoy + venceEnDias. */
+    protected void addMembership(long memberId, int venceEnDias) {
         jdbc.update("INSERT OR IGNORE INTO shift (id, employee_id, opened_at, closed_at, opening_cash_cents) "
                 + "VALUES (900, 1, '2026-01-01T08:00:00', '2026-01-01T20:00:00', 0)");
         long pid = nextPaymentId++;
         jdbc.update("INSERT INTO payment (id, member_id, plan_id, amount_cents, method, shift_id, employee_id, paid_at) "
-                + "VALUES (?, ?, 3, 30000, 'efectivo', 900, 1, '2026-01-01T09:00:00')", pid, id);
+                + "VALUES (?, ?, 3, 30000, 'efectivo', 900, 1, '2026-01-01T09:00:00')", pid, memberId);
         LocalDate fin = today().plusDays(venceEnDias);
         jdbc.update("INSERT INTO membership (member_id, plan_id, payment_id, starts_on, ends_on) VALUES (?, 3, ?, ?, ?)",
-                id, pid, fin.minusDays(30).toString(), fin.toString());
+                memberId, pid, fin.minusDays(30).toString(), fin.toString());
+    }
+
+    /** Inicia sesión y abre turno con el fondo indicado (centavos). */
+    protected MockHttpSession loginWithShift(String username, long openingCashCents) throws Exception {
+        MockHttpSession s = loginAs(username);
+        mvc.perform(post("/api/shifts/open").session(s).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body(Map.of("openingCashCents", openingCashCents))))
+                .andExpect(status().isCreated());
+        return s;
     }
 
     protected static LocalDate today() {

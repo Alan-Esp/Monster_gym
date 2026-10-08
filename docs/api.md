@@ -7,7 +7,7 @@
 - Roles: A = Administrador, R = Recepción, E = Entrenador.
 - Errores: HTTP adecuado y cuerpo
   { "error": { "code": "SIN_TURNO", "message": "Abre un turno antes de cobrar." } }
-  Códigos usados: NO_AUTENTICADO (401), SIN_PERMISO (403), CSRF_INVALIDO (403, falta o no coincide X-XSRF-TOKEN), NO_ENCONTRADO (404), VALIDACION (422, con "fields"), SIN_TURNO (409), TURNO_ABIERTO (409), STOCK_INSUFICIENTE (409), SOCIO_VENCIDO (409, requiere confirmación), DOBLE_REGISTRO (409, requiere confirmación), CUENTA_BLOQUEADA (423, tras 5 intentos fallidos; 15 minutos), PAGO_CANCELADO (409), TURNO_CERRADO (409, no se cancela un pago de un turno cerrado), NUMERO_AGOTADO (409, se pasó del socio 9999), ACCESO_MANUAL_DESACTIVADO (409, setting.manual_access = 0).
+  Códigos usados: NO_AUTENTICADO (401), SIN_PERMISO (403), CSRF_INVALIDO (403, falta o no coincide X-XSRF-TOKEN), NO_ENCONTRADO (404), VALIDACION (422, con "fields"), SIN_TURNO (409), TURNO_ABIERTO (409), STOCK_INSUFICIENTE (409), SOCIO_VENCIDO (409, requiere confirmación), DOBLE_REGISTRO (409, requiere confirmación), CUENTA_BLOQUEADA (423, tras 5 intentos fallidos; 15 minutos), PAGO_CANCELADO (409), TURNO_CERRADO (409, no se cancela un pago de un turno cerrado), NUMERO_AGOTADO (409, se pasó del socio 9999), ACCESO_MANUAL_DESACTIVADO (409, setting.manual_access = 0), VENTA_CANCELADA (409), OPERACION_NO_PERMITIDA (409, p. ej. desactivarse a sí mismo).
 - Acciones que requieren confirmación (SOCIO_VENCIDO, DOBLE_REGISTRO) se repiten con "confirm": true.
 
 ## Autenticación y turnos
@@ -83,10 +83,28 @@ GET /api/visits (date por defecto hoy) responde
 | POST /api/sales/{id}/void | A | { reason } |
 | POST /api/products/{id}/restock | A, R | { qty, reason } |
 
+- Producto: { id, name, size, priceCents, stock, capacity, minStock, soldToday, soldTodayCents, lowStock (stock <= minStock), outOfStock }.
+- restock: reason = reabasto (suma qty > 0), merma (resta qty > 0) o ajuste (suma qty con signo, distinto de 0).
+  El stock nunca queda negativo (409 STOCK_INSUFICIENTE). Cada movimiento queda en stock_movement con el empleado.
+- POST /api/sales: una sola transacción; exige turno abierto (SIN_TURNO); el mismo producto en varias líneas se suma;
+  si un producto no alcanza responde 409 STOCK_INSUFICIENTE y no guarda nada. Respuesta:
+  { id, folio, createdAt, method, totalCents, employeeName, shiftId, voidedAt, voidReason,
+    items: [{ productId, name, qty, unitPriceCents, subtotalCents }] }.
+- POST /api/sales/{id}/void regresa el stock (movimiento "ajuste") y solo procede si el turno de la venta sigue abierto.
+- POST /api/shifts/close acepta además { notes } (observaciones, máximo 500 caracteres); el corte las devuelve en "notes".
+
 ## Admin
 | CRUD /api/employees | A | Alta, edición, activar/desactivar, cambio de PIN |
 | GET/PUT /api/settings | A | gymName, capacity, warnDays, manualAccess, sound, insideMinutes |
-| GET /api/reports/income-monthly?months=6 | A | [{ label, totalCents }] |
+| GET /api/reports/income-monthly?months=6 | A | [{ month, label, membershipsCents, fridgeCents, totalCents, current }] |
+| GET /api/reports/summary | A | { activeMembers, newThisMonth, renewalRate, expiredLast30Days } |
+
+- /api/employees: GET lista { id, name, username, role, shiftLabel, active, locked }; POST { name, username, role, shiftLabel, pin };
+  PUT /{id} { name, username, role, shiftLabel, active }; PUT /{id}/pin { pin } (también quita el bloqueo).
+  Nadie puede desactivarse ni quitarse el rol de administrador; siempre queda al menos un administrador activo.
+  Un empleado desactivado pierde su sesión en la siguiente petición.
+- PUT /api/settings actualiza solo los campos enviados. Rangos: capacity 1-2000, warnDays 0-30, insideMinutes 15-600.
+- renewalRate: de los socios cuya membresía venció en los últimos 30 días, % que hoy está vigente (null si no hay).
 
 ## Impresión de tickets (Fase 5B)
 | Método y ruta | Roles | Descripción |

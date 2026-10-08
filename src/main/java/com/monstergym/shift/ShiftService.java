@@ -53,9 +53,10 @@ public class ShiftService {
     }
 
     @Transactional
-    public ShiftSummary close(EmployeePrincipal employee, long countedCashCents) {
+    public ShiftSummary close(EmployeePrincipal employee, long countedCashCents, String notes) {
         Shift open = shifts.findOpenByEmployee(employee.id()).orElseThrow(ApiException::sinTurno);
-        if (!shifts.close(open.id(), Times.format(LocalDateTime.now(clock)), countedCashCents)) {
+        String cleanNotes = notes == null || notes.isBlank() ? null : notes.trim();
+        if (!shifts.close(open.id(), Times.format(LocalDateTime.now(clock)), countedCashCents, cleanNotes)) {
             throw ApiException.sinTurno();
         }
         return summary(shifts.findById(open.id()).orElseThrow());
@@ -89,7 +90,7 @@ public class ShiftService {
         return new ShiftSummary(
                 shift.id(), shift.employeeName(), shift.openedAt(), shift.closedAt(),
                 shift.openingCashCents(), memberships, fridge, byMethod, memTotal + fridgeTotal,
-                expected, counted, counted == null ? null : counted - expected);
+                expected, counted, counted == null ? null : counted - expected, shift.notes());
     }
 
     private static Map<String, Long> withAllMethods(Map<String, Long> totals) {

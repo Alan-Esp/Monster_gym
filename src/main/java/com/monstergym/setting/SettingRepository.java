@@ -27,6 +27,11 @@ public class SettingRepository {
         }
     }
 
+    public void set(String key, String value) {
+        jdbc.update("INSERT INTO setting (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                key, value);
+    }
+
     public boolean getBool(String key, boolean defaultValue) {
         return get(key).map(v -> "1".equals(v.trim()) || "true".equalsIgnoreCase(v.trim())).orElse(defaultValue);
     }

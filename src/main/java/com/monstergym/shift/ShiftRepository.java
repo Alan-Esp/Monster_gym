@@ -19,7 +19,7 @@ public class ShiftRepository {
 
     private static final String SELECT = """
             SELECT s.id, s.employee_id, e.name AS employee_name, s.opened_at, s.closed_at,
-                   s.opening_cash_cents, s.counted_cash_cents
+                   s.opening_cash_cents, s.counted_cash_cents, s.notes
             FROM shift s JOIN employee e ON e.id = s.employee_id
             """;
 
@@ -30,7 +30,8 @@ public class ShiftRepository {
             rs.getString("opened_at"),
             rs.getString("closed_at"),
             rs.getLong("opening_cash_cents"),
-            rs.getObject("counted_cash_cents") == null ? null : rs.getLong("counted_cash_cents"));
+            rs.getObject("counted_cash_cents") == null ? null : rs.getLong("counted_cash_cents"),
+            rs.getString("notes"));
 
     private final JdbcTemplate jdbc;
 
@@ -66,10 +67,10 @@ public class ShiftRepository {
     }
 
     /** Cierra el turno solo si sigue abierto. Devuelve false si ya estaba cerrado. */
-    public boolean close(long id, String closedAt, long countedCashCents) {
+    public boolean close(long id, String closedAt, long countedCashCents, String notes) {
         return jdbc.update(
-                "UPDATE shift SET closed_at = ?, counted_cash_cents = ? WHERE id = ? AND closed_at IS NULL",
-                closedAt, countedCashCents, id) == 1;
+                "UPDATE shift SET closed_at = ?, counted_cash_cents = ?, notes = ? WHERE id = ? AND closed_at IS NULL",
+                closedAt, countedCashCents, notes, id) == 1;
     }
 
     // ── Totales del corte (excluyen pagos y ventas cancelados) ──────────────────
