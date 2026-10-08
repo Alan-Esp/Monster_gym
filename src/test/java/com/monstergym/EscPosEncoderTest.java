@@ -57,9 +57,12 @@ class EscPosEncoderTest {
     }
 
     @Test
-    void loQueLaTablaNoTiene_saleSinAcentoONoComoBasura() {
-        byte[] out = encode(Charset.forName("US-ASCII"), 0, Ticket.Line.plain("Ñandú ¿€?"));
-        assertThat(indexOf(out, "Nandu ???\n".getBytes())).isPositive();
+    void enAscii_sinAcentosSinSignosDeAperturaYSinBytesAltos() {
+        // La PT-210 real no sale del modo chino: todo byte >= 0x80 se imprime como carácter chino
+        byte[] out = encode(Charset.forName("US-ASCII"), 0,
+                Ticket.Line.plain("¿Ñandú? ¡Peña! áéíóúü · € — fin"));
+        assertThat(indexOf(out, "Nandu? Pena! aeiouu , ? - fin\n".getBytes())).isPositive();
+        for (byte b : out) assertThat(b & 0xFF).isLessThan(0x80);
     }
 
     @Test

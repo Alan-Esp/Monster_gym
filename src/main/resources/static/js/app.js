@@ -151,7 +151,7 @@
     if (!job) return '';
     if (job.status === 'desactivada') return `\n\nTicket ${what}: la impresión está desactivada.`;
     if (job.status === 'entregado') return `\n\nTicket ${what}: enviado a la impresora.`;
-    if (job.status === 'en_cola_windows') return `\n\nTicket ${what}: en la cola de Windows (si no sale, revisa que la impresora esté encendida).`;
+    if (job.status === 'en_cola_windows') return `\n\nTicket ${what}: enviado a la impresora. Si no sale, enciéndela y reimprímelo.`;
     if (job.status === 'fallido') return `\n\nNo se imprimió el ticket ${what}: ${job.error}`;
     if (job.error) return `\n\nEl ticket ${what} aún no sale: ${job.error}`;
     return `\n\nTicket ${what}: en cola de impresión.`;
@@ -166,6 +166,9 @@
 
   // Reimpresión desde un botón: lo deshabilita mientras espera y avisa si falla
   async function reprint(btn, call, what) {
+    // Con la impresora apagada Windows guarda el ticket y lo suelta al encenderla: la copia podría duplicarlo
+    if (!confirm(`¿Reimprimir la copia ${what}?\n\nSi la impresora estaba apagada cuando se mandó el original, `
+      + 'ese original puede salir solo al encenderla. Reimprime solo si no salió después de encenderla.')) return;
     const label = btn.textContent;
     btn.disabled = true;
     btn.textContent = 'Imprimiendo…';
@@ -992,8 +995,6 @@
       desc.textContent = text;
       desc.classList.toggle('t-v', st.ready === false);
       desc.classList.toggle('t-a', st.ready === true);
-      $('#cfgPortDesc').textContent = st.availablePorts.length
-        ? 'Puertos en esta PC: ' + st.availablePorts.join(', ') : 'Puerto serie saliente del Bluetooth';
       $('#cfgPrinterNameDesc').textContent = st.availablePrinters.length
         ? 'Instaladas: ' + st.availablePrinters.join(', ') : 'Nombre exacto en Windows';
     } catch (err) {
@@ -1008,11 +1009,10 @@
     try {
       const job = await waitPrint(await API.printer.test(), 90000, false);
       if (job.status === 'entregado') {
-        alert('La impresora recibió la prueba.\nRevisa en el papel la línea de acentos (áéíóúñÑü¿¡$). '
-          + 'Si salen signos raros, cambia la página de códigos y el juego de caracteres.');
+        alert('Prueba guardada (modo desarrollo).');
       } else if (job.status === 'en_cola_windows') {
-        alert('Windows aceptó la prueba. Si no sale el papel, la impresora está apagada o desconectada '
-          + '(la cola de Windows no lo detecta).');
+        alert('Se envió la prueba a la impresora.\nSi no sale el papel, revisa que esté encendida y emparejada: '
+          + 'Windows no avisa cuando está apagada.\nLa línea de acentos debe salir sin tildes (aeiounNu$).');
       } else if (job.status === 'fallido') {
         alert('No se imprimió la prueba.\n' + job.error);
       } else {
@@ -1177,17 +1177,14 @@
 
   /* ----- Configuración: se guarda al salir del campo (o Enter) y al tocar un interruptor ----- */
   // Los campos de impresión vienen agrupados en settings.printing; aquí se ven con el nombre que usa el PUT
-  const flatSettings = s => ({ ...s, printEnabled: s.printing.enabled, printerTransport: s.printing.transport,
-    printerPort: s.printing.port, printerName: s.printing.printerName, printerCodepage: s.printing.codepage,
-    printerCharset: s.printing.charset, ticketFooter: s.printing.ticketFooter });
+  const flatSettings = s => ({ ...s, printEnabled: s.printing.enabled, printerName: s.printing.printerName,
+    printerCodepage: s.printing.codepage, printerCharset: s.printing.charset, ticketFooter: s.printing.ticketFooter });
 
   function renderSettings(s) {
     const f = flatSettings(s);
     $('#cfgName').value = f.gymName;
     $('#cfgCapacity').value = f.capacity;
     $('#cfgWarn').value = f.warnDays;
-    $('#cfgPrinterTransport').value = f.printerTransport;
-    $('#cfgPrinterPort').value = f.printerPort;
     $('#cfgPrinterName').value = f.printerName;
     $('#cfgCodepage').value = f.printerCodepage;
     $('#cfgCharset').value = f.printerCharset;
@@ -1211,7 +1208,6 @@
   }
   const text = v => v.trim();
   [['#cfgName', 'gymName', text], ['#cfgCapacity', 'capacity', Number], ['#cfgWarn', 'warnDays', Number],
-    ['#cfgPrinterTransport', 'printerTransport', text], ['#cfgPrinterPort', 'printerPort', v => v.trim().toUpperCase()],
     ['#cfgPrinterName', 'printerName', text], ['#cfgCodepage', 'printerCodepage', Number],
     ['#cfgCharset', 'printerCharset', text], ['#cfgFooter', 'ticketFooter', text]]
     .forEach(([sel, key, parse]) => {

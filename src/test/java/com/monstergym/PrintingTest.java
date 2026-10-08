@@ -225,7 +225,24 @@ class PrintingTest extends ApiTestBase {
                 .andReturn().getResponse().getContentAsString();
         long jobId = json.readTree(res).get("jobId").asLong();
         assertThat(awaitJob(jobId)).containsEntry("kind", "prueba").containsEntry("status", "entregado");
-        assertThat(ticketText(jobId, "prueba")).contains("áéíóúñÑü¿¡$", "ESC t 2", "IBM850");
+        assertThat(ticketText(jobId, "prueba")).contains("áéíóúñÑü¿¡$", "ESC t 0", "US-ASCII");
+    }
+
+    @Test
+    void conLaConfiguracionPorDefecto_nuncaSaleUnByteDeModoChino() throws Exception {
+        insertMember(2, "0002", "María Ñúñez Peña", null, null);
+        MockHttpSession s = loginWithShift("recepcion", 0);
+        String res = mvc.perform(post("/api/payments").session(s).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body(Map.of("memberId", 2, "planId", 3, "method", "efectivo"))))
+                .andExpect(status().isCreated())
+                .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
+        long jobId = json.readTree(res).at("/print/jobId").asLong();
+        awaitJob(jobId);
+        byte[] bin = Files.readAllBytes(fake().dir().resolve(String.format("%06d-cobro.bin", jobId)));
+        for (byte b : bin) assertThat(b & 0xFF).as("byte >= 0x80 sale como chino en la PT-210").isLessThan(0x80);
+        assertThat(new String(bin, StandardCharsets.US_ASCII)).contains("Maria Nunez Pena", "COBRO DE MEMBRESIA",
+                "Atendio: Rocio Recepcion");
     }
 
     @Test
@@ -263,34 +280,39 @@ class PrintingTest extends ApiTestBase {
     void configuracionDeImpresion_seValida() throws Exception {
         MockHttpSession admin = loginAs("admin");
         mvc.perform(put("/api/settings").session(admin).with(csrf()).contentType(MediaType.APPLICATION_JSON)
-                        .content(body(Map.of("printerPort", "com5", "printerTransport", "windows",
-                                "printerCodepage", 16, "printerCharset", "windows-1252"))))
+                        .content(body(Map.of("printerName", " PT-210 ", "printerCodepage", 16,
+                                "printerCharset", "windows-1252", "ticketFooter", "Vuelve pronto"))))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.printing.port").value("COM5"))
-                .andExpect(jsonPath("$.printing.transport").value("windows"))
+                .andExpect(jsonPath("$.printing.printerName").value("PT-210"))
                 .andExpect(jsonPath("$.printing.codepage").value(16))
-                .andExpect(jsonPath("$.printing.charset").value("windows-1252"));
+                .andExpect(jsonPath("$.printing.charset").value("windows-1252"))
+                .andExpect(jsonPath("$.printing.ticketFooter").value("Vuelve pronto"));
         mvc.perform(put("/api/settings").session(admin).with(csrf()).contentType(MediaType.APPLICATION_JSON)
                         .content(body(Map.of("printerCharset", "PC-INVENTADO"))))
                 .andExpect(status().isUnprocessableEntity())
                 .andExpect(jsonPath("$.error.fields.printerCharset").exists());
         mvc.perform(put("/api/settings").session(admin).with(csrf()).contentType(MediaType.APPLICATION_JSON)
-                        .content(body(Map.of("printerTransport", "usb", "printerPort", "LPT1", "printerCodepage", 300))))
+                        .content(body(Map.of("printerName", "  "))))
                 .andExpect(status().isUnprocessableEntity())
-                .andExpect(jsonPath("$.error.fields.printerTransport").exists())
-                .andExpect(jsonPath("$.error.fields.printerPort").exists())
-                .andExpect(jsonPath("$.error.fields.printerCodepage").exists());
-        // Deja la configuración como la crea V5 para las demás pruebas
-        Map.of("printer_port", "COM4", "printer_transport", "serial", "printer_codepage", "2", "printer_charset", "IBM850")
+                .andExpect(jsonPath("$.error.fields.printerName").exists());
+        mvc.perform(put("/api/settings").session(admin).with(csrf()).contentType(MediaType.APPLICATION_JSON)
+                        .content(body(Map.of("printerCodepage", 300, "printRetries", 11))))
+                .andExpect(status().isUnprocessableEntity())
+                .andExpect(jsonPath("$.error.fields.printerCodepage").exists())
+                .andExpect(jsonPath("$.error.fields.printRetries").exists());
+        // Deja la configuración como la crean las migraciones para las demás pruebas
+        Map.of("printer_codepage", "0", "printer_charset", "US-ASCII", "ticket_footer", "Gracias por entrenar con nosotros.")
                 .forEach(this::setting);
     }
 
     @Test
-    void migracion_creaLaConfiguracionDeLaPt210() {
+    void migraciones_dejanLaPt210PorWindowsYSinAcentos() {
         Map<String, String> s = new java.util.HashMap<>();
         jdbc.query("SELECT key, value FROM setting", rs -> { s.put(rs.getString(1), rs.getString(2)); });
-        assertThat(s).containsKeys("printer_transport", "printer_port", "printer_codepage", "printer_charset",
-                "print_timeout_seconds", "print_retries", "printer_status_check");
-        assertThat(s.get("printer_name")).isEqualTo("PT-210");
+        assertThat(s).containsEntry("printer_name", "PT-210")
+                .containsEntry("printer_charset", "US-ASCII")
+                .containsEntry("printer_codepage", "0")
+                .containsKeys("print_timeout_seconds", "print_retries")
+                .doesNotContainKeys("printer_transport", "printer_port", "printer_status_check");
     }
 }

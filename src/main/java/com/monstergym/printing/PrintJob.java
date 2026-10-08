@@ -7,7 +7,7 @@ public record PrintJob(
         Long refId,             // payment.id o shift.id
         boolean isCopy,
         String status,          // pendiente | enviando | entregado | en_cola_windows | fallido
-        String transport,       // serial | windows | archivo
+        String transport,       // windows | archivo (desarrollo)
         int attempts,
         String error,           // último error (también mientras se reintenta)
         long employeeId,

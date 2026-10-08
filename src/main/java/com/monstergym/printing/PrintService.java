@@ -26,10 +26,9 @@ public class PrintService {
 
     private static final Logger log = LoggerFactory.getLogger(PrintService.class);
 
-    public record PrinterStatus(boolean enabled, String mode, String transport, String printerName, String port,
+    public record PrinterStatus(boolean enabled, String mode, String transport, String printerName,
                                 int codepage, String charset, Boolean ready, String detail, int pending,
-                                int failedToday, PrintJob lastJob, List<String> availablePorts,
-                                List<String> availablePrinters) {
+                                int failedToday, PrintJob lastJob, List<String> availablePrinters) {
     }
 
     private final PrintJobRepository jobs;
@@ -104,17 +103,17 @@ public class PrintService {
                 detail = "El último ticket falló: " + last.error();
             } else if ("entregado".equals(last.status())) {
                 ready = true;
-                detail = "El último ticket llegó a la impresora el " + TicketRenderer.dateTime(last.finishedAt())
-                        + ". Que haya salido en papel no se puede confirmar.";
+                detail = probe.detail();
             } else {
                 ready = probe.ready();
-                detail = probe.detail();
+                detail = "El último ticket se envió a Windows el " + TicketRenderer.dateTime(last.finishedAt())
+                        + ". " + probe.detail();
             }
         }
         String since = LocalDate.now(clock) + "T00:00:00";
         return new PrinterStatus(config.enabled(), printer.mode(), printer.transport(config), config.printerName(),
-                config.port(), config.codepage(), config.charsetName(), ready, detail, jobs.countUnfinished(),
-                jobs.countFailedSince(since), last, availablePorts(), availablePrinters());
+                config.codepage(), config.charsetName(), ready, detail, jobs.countUnfinished(),
+                jobs.countFailedSince(since), last, availablePrinters());
     }
 
     private PrintInfo enqueue(String kind, Long refId, boolean copy, EmployeePrincipal employee) {
@@ -141,16 +140,8 @@ public class PrintService {
     private TicketPrinter.Probe probeSafely(PrinterConfig config) {
         try {
             return printer.probe(config);
-        } catch (RuntimeException | LinkageError e) {
+        } catch (RuntimeException e) {
             return new TicketPrinter.Probe(null, "No se pudo consultar la impresora: " + e.getMessage());
-        }
-    }
-
-    private static List<String> availablePorts() {
-        try {
-            return List.of(SerialTransport.availablePorts());
-        } catch (RuntimeException | LinkageError e) {
-            return List.of();  // sin la librería nativa del puerto serie
         }
     }
 

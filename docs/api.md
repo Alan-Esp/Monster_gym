@@ -123,17 +123,18 @@ o { "jobId": null, "status": "desactivada" } (setting.print_enabled = 0)
 o { "jobId": null, "status": "fallido", "error": "..." } (ni siquiera se pudo encolar).
 El cobro y el cierre se guardan aunque la impresión falle. La pantalla consulta el resultado con GET /api/print-jobs/{id}.
 
-- Trabajo: { id, kind (cobro|cierre_turno|prueba), refId, isCopy, status, transport (serial|windows|archivo),
+- Trabajo: { id, kind (cobro|cierre_turno|prueba), refId, isCopy, status, transport (windows|archivo),
   attempts, error, employeeId, createdAt, finishedAt }.
-- status: pendiente → enviando → entregado | en_cola_windows | fallido. Mientras se reintenta queda "enviando"
-  con el error del último intento. Ningún estado significa "salió en papel": eso no se puede confirmar.
+- status: pendiente → enviando → en_cola_windows | fallido (entregado solo en desarrollo). Mientras se reintenta
+  queda "enviando" con el error del último intento. Ningún estado significa "salió en papel": con la PT-210 por
+  Bluetooth no se puede saber si está encendida.
 - Reimpresión o prueba con la impresión desactivada: 409 IMPRESION_DESACTIVADA.
-- Estado: { enabled, mode (real|fake), transport, printerName, port, codepage, charset, ready (true, false o
-  null = no se puede saber), detail, pending, failedToday, lastJob, availablePorts, availablePrinters }.
-- GET /api/settings incluye "printing": { enabled, transport, printerName, port, codepage, charset, ticketFooter,
-  timeoutSeconds, retries, statusCheck }. PUT /api/settings acepta printEnabled, printerTransport (serial|windows),
-  printerName, printerPort (COMn), printerCodepage (0-255), printerCharset (debe existir en Java), ticketFooter
-  (máx. 200), printTimeoutSeconds (5-120), printRetries (0-10), printerStatusCheck.
+- Estado: { enabled, mode (real|fake), transport, printerName, codepage, charset, ready (true, false o
+  null = no se puede saber), detail, pending, failedToday, lastJob, availablePrinters }. ready = false solo si la
+  impresora no está instalada, hay trabajos detenidos en la cola de Windows o el último ticket falló.
+- GET /api/settings incluye "printing": { enabled, printerName, codepage, charset, ticketFooter, timeoutSeconds,
+  retries }. PUT /api/settings acepta printEnabled, printerName (no vacío), printerCodepage (0-255), printerCharset
+  (debe existir en Java; US-ASCII = sin acentos), ticketFooter (máx. 200), printTimeoutSeconds (5-120), printRetries (0-10).
 
 ## Huella (Fase 6)
 | POST /api/fingerprint/enroll/{memberId} | A, R | Inicia el enrolamiento (captura en el backend) |

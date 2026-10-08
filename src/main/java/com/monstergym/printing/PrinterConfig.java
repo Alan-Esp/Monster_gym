@@ -11,32 +11,23 @@ import java.nio.charset.StandardCharsets;
  */
 public record PrinterConfig(
         boolean enabled,
-        String transport,       // serial | windows
-        String printerName,     // nombre de la impresora en Windows (transporte windows)
-        String port,            // COM4 (transporte serial)
+        String printerName,     // nombre de la impresora en Windows
         int codepage,           // n de ESC t n
-        String charsetName,     // charset de Java que corresponde a esa tabla
+        String charsetName,     // charset de Java; US-ASCII = sin acentos (la PT-210 no sale del modo chino)
         int timeoutSeconds,
         int retries,
-        boolean statusCheck,    // preguntar papel con DLE EOT 4 (solo serial)
         int width,
         String gymName,
         String footer) {
 
-    public static final String SERIAL = "serial";
-    public static final String WINDOWS = "windows";
-
     public static PrinterConfig load(SettingRepository s) {
         return new PrinterConfig(
                 s.getBool("print_enabled", true),
-                WINDOWS.equals(s.get("printer_transport").orElse(SERIAL).trim()) ? WINDOWS : SERIAL,
                 s.get("printer_name").orElse("").trim(),
-                s.get("printer_port").orElse("COM4").trim(),
-                Math.clamp(s.getInt("printer_codepage", 2), 0, 255),
-                s.get("printer_charset").orElse("IBM850").trim(),
+                Math.clamp(s.getInt("printer_codepage", 0), 0, 255),
+                s.get("printer_charset").orElse("US-ASCII").trim(),
                 Math.clamp(s.getInt("print_timeout_seconds", 20), 1, 120),
                 Math.clamp(s.getInt("print_retries", 3), 0, 10),
-                s.getBool("printer_status_check", true),
                 Math.clamp(s.getInt("ticket_chars_per_line", 32), 24, 64),
                 s.get("gym_name").orElse("Monster Gym"),
                 s.get("ticket_footer").orElse(""));
@@ -57,7 +48,6 @@ public record PrinterConfig(
 
     /** Resumen para el ticket de prueba y el estado en Admin. */
     public String describe() {
-        String target = SERIAL.equals(transport) ? "Puerto " + port : "Windows: " + printerName;
-        return target + " · ESC t " + codepage + " · " + charsetName + " · " + width + " col";
+        return "Windows: " + printerName + ", ESC t " + codepage + ", " + charsetName + ", " + width + " col";
     }
 }

@@ -11,6 +11,7 @@ import java.text.Normalizer;
  * Convierte un Ticket a bytes ESC/POS para la PT-210.
  * Inicio: ESC @ (inicializar), FS . (salir del modo chino con que arranca) y ESC t n (página de códigos).
  * Fin: 4 saltos de línea. Nunca manda corte (GS V) ni apertura de cajón (ESC p): la PT-210 no tiene.
+ * La PT-210 real ignora FS . y sigue en modo chino: con US-ASCII (valor por defecto) nunca se manda un byte >= 0x80.
  */
 public final class EscPosEncoder {
 
@@ -38,7 +39,7 @@ public final class EscPosEncoder {
         return out.toByteArray();
     }
 
-    /** Codifica el texto; lo que la tabla no tenga se escribe sin acento (á → a) o como '?'. */
+    /** Codifica el texto; lo que la tabla no tenga se escribe sin acento (á → a, Ñ → N), sin ¿ ¡ o como '?'. */
     static byte[] text(String text, CharsetEncoder encoder) {
         StringBuilder safe = new StringBuilder(text.length());
         for (char c : text.toCharArray()) {
@@ -46,6 +47,10 @@ public final class EscPosEncoder {
                 safe.append(' ');  // ningún carácter de control se cuela como comando
             } else if (encoder.canEncode(c)) {
                 safe.append(c);
+            } else if (c == '¿' || c == '¡') {
+                continue;          // en español se entiende sin el signo de apertura
+            } else if (c == '·' || c == '—' || c == '–') {
+                safe.append(c == '·' ? ',' : '-');
             } else {
                 String base = Normalizer.normalize(String.valueOf(c), Normalizer.Form.NFD).replaceAll("\\p{M}", "");
                 safe.append(base.length() == 1 && encoder.canEncode(base.charAt(0)) ? base.charAt(0) : '?');

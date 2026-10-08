@@ -1,54 +1,34 @@
 package com.monstergym.printing;
 
-/** Impresora real: ESC/POS por puerto COM (serial) o por la cola de Windows, según setting.printer_transport. */
+/**
+ * Impresora real: bytes ESC/POS a la impresora instalada en Windows (setting.printer_name).
+ * Con la PT-210 por Bluetooth, Windows acepta el trabajo aunque esté apagada: el resultado es
+ * "en_cola_windows", nunca "entregado".
+ */
 public class EscPosPrinter implements TicketPrinter {
 
-    private final PrinterTransport serial;
-    private final PrinterTransport windows;
-
-    public EscPosPrinter() {
-        this(new SerialTransport(), new WindowsSpoolerTransport());
-    }
-
-    EscPosPrinter(PrinterTransport serial, PrinterTransport windows) {
-        this.serial = serial;
-        this.windows = windows;
-    }
+    private final WindowsSpoolerTransport windows = new WindowsSpoolerTransport();
 
     @Override
     public Delivery print(long jobId, String kind, Ticket ticket, PrinterConfig config) throws PrinterException {
         if (!PrinterConfig.isSupported(config.charsetName())) {
             throw new PrinterException("El charset \"" + config.charsetName() + "\" no existe en Java.", false);
         }
-        byte[] data = EscPosEncoder.encode(ticket, config.codepage(), config.charset());
-        PrinterTransport transport = transportFor(config);
-        // Si se cambió de transporte, se suelta el puerto COM para no dejarlo ocupado
-        if (transport == windows) serial.release();
-        return transport.send(data, config);
-    }
-
-    @Override
-    public void release() {
-        serial.release();
-        windows.release();
+        return windows.send(EscPosEncoder.encode(ticket, config.codepage(), config.charset()), config);
     }
 
     @Override
     public Probe probe(PrinterConfig config) {
-        return transportFor(config).probe(config);
+        return windows.probe(config);
     }
 
     @Override
     public String transport(PrinterConfig config) {
-        return config.transport();
+        return "windows";
     }
 
     @Override
     public String mode() {
         return "real";
-    }
-
-    private PrinterTransport transportFor(PrinterConfig config) {
-        return PrinterConfig.WINDOWS.equals(config.transport()) ? windows : serial;
     }
 }

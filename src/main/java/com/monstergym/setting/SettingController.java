@@ -5,7 +5,6 @@ import com.monstergym.printing.PrinterConfig;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
-import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.transaction.annotation.Transactional;
@@ -14,8 +13,6 @@ import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
-
-import java.util.Locale;
 
 /** Configuración general (solo Administrador). PUT actualiza solo los campos que vienen en el cuerpo. */
 @RestController
@@ -28,9 +25,8 @@ public class SettingController {
     }
 
     /** Impresión de tickets (Fase 5B). */
-    public record Printing(boolean enabled, String transport, String printerName, String port, int codepage,
-                           String charset, String ticketFooter, int timeoutSeconds, int retries,
-                           boolean statusCheck) {
+    public record Printing(boolean enabled, String printerName, int codepage, String charset, String ticketFooter,
+                           int timeoutSeconds, int retries) {
     }
 
     public record SettingsUpdate(
@@ -44,10 +40,7 @@ public class SettingController {
             @Min(value = 15, message = "El tiempo dentro debe ser de 15 a 600 minutos.")
             @Max(value = 600, message = "El tiempo dentro debe ser de 15 a 600 minutos.") Integer insideMinutes,
             Boolean printEnabled,
-            @Pattern(regexp = "serial|windows", message = "Elige cómo se conecta la impresora: serial o windows.")
-            String printerTransport,
             @Size(max = 120, message = "El nombre de la impresora es demasiado largo.") String printerName,
-            @Pattern(regexp = "(?i)COM[1-9][0-9]{0,2}", message = "Escribe el puerto como COM4.") String printerPort,
             @Min(value = 0, message = "La página de códigos debe ser de 0 a 255.")
             @Max(value = 255, message = "La página de códigos debe ser de 0 a 255.") Integer printerCodepage,
             @Size(max = 40, message = "El charset es demasiado largo.") String printerCharset,
@@ -56,8 +49,7 @@ public class SettingController {
             @Min(value = 5, message = "El tiempo de espera debe ser de 5 a 120 segundos.")
             @Max(value = 120, message = "El tiempo de espera debe ser de 5 a 120 segundos.") Integer printTimeoutSeconds,
             @Min(value = 0, message = "Los reintentos deben ser de 0 a 10.")
-            @Max(value = 10, message = "Los reintentos deben ser de 0 a 10.") Integer printRetries,
-            Boolean printerStatusCheck) {
+            @Max(value = 10, message = "Los reintentos deben ser de 0 a 10.") Integer printRetries) {
     }
 
     private final SettingRepository settings;
@@ -76,8 +68,8 @@ public class SettingController {
                 settings.getBool("manual_access", true),
                 settings.getBool("sound", true),
                 settings.getInt("inside_minutes", 120),
-                new Printing(p.enabled(), p.transport(), p.printerName(), p.port(), p.codepage(), p.charsetName(),
-                        p.footer(), p.timeoutSeconds(), p.retries(), p.statusCheck()));
+                new Printing(p.enabled(), p.printerName(), p.codepage(), p.charsetName(), p.footer(),
+                        p.timeoutSeconds(), p.retries()));
     }
 
     @PutMapping
@@ -94,21 +86,23 @@ public class SettingController {
         if (u.insideMinutes() != null) settings.set("inside_minutes", u.insideMinutes().toString());
 
         if (u.printEnabled() != null) settings.set("print_enabled", u.printEnabled() ? "1" : "0");
-        if (u.printerTransport() != null) settings.set("printer_transport", u.printerTransport());
-        if (u.printerName() != null) settings.set("printer_name", u.printerName().trim());
-        if (u.printerPort() != null) settings.set("printer_port", u.printerPort().toUpperCase(Locale.ROOT));
+        if (u.printerName() != null) {
+            if (u.printerName().isBlank()) {
+                throw ApiException.invalidField("printerName", "Escribe el nombre de la impresora en Windows.");
+            }
+            settings.set("printer_name", u.printerName().trim());
+        }
         if (u.printerCodepage() != null) settings.set("printer_codepage", u.printerCodepage().toString());
         if (u.printerCharset() != null) {
             if (!PrinterConfig.isSupported(u.printerCharset().trim())) {
                 throw ApiException.invalidField("printerCharset",
-                        "Ese charset no existe en Java. Ejemplos: IBM850, IBM858, windows-1252.");
+                        "Ese charset no existe en Java. Ejemplos: US-ASCII (sin acentos), IBM850, windows-1252.");
             }
             settings.set("printer_charset", u.printerCharset().trim());
         }
         if (u.ticketFooter() != null) settings.set("ticket_footer", u.ticketFooter().trim());
         if (u.printTimeoutSeconds() != null) settings.set("print_timeout_seconds", u.printTimeoutSeconds().toString());
         if (u.printRetries() != null) settings.set("print_retries", u.printRetries().toString());
-        if (u.printerStatusCheck() != null) settings.set("printer_status_check", u.printerStatusCheck() ? "1" : "0");
         return get();
     }
 }

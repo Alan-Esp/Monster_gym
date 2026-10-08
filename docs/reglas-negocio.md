@@ -65,30 +65,32 @@ Estas son las decisiones por defecto. Si cambian, se actualiza este archivo prim
   por Bluetooth SPP. En Windows: "PT-210" con controlador Generic / Text Only sobre un COM saliente (COM4).
 - Son comprobantes internos, no facturas. Llevan la leyenda "Comprobante no fiscal".
 - Cabecera de todos los tickets: setting.gym_name, folio, fecha y hora, nombre del empleado. Pie: setting.ticket_footer.
-- Cada ticket empieza con ESC @ (inicializar), FS . (cancelar el modo chino con que arranca la impresora) y ESC t n
-  (página de códigos). n (setting.printer_codepage) y el charset de Java (setting.printer_charset) son configurables
-  porque en los clones la tabla varía: PC850 suele ser n = 2 con IBM850; WPC1252, n = 16 con windows-1252.
-  Lo que la tabla no tenga se imprime sin acento.
+- Cada ticket empieza con ESC @ (inicializar), FS . (cancelar modo chino) y ESC t n (página de códigos).
+- **Sin acentos.** Probado con la PT-210 real: ignora FS . y se queda en modo chino con cualquier página de códigos,
+  así que todo byte >= 0x80 sale como carácter chino. Por eso setting.printer_charset = US-ASCII (V6): los acentos se
+  imprimen sin tilde (Ñúñez → Nunez, Atendió → Atendio) y ¿ ¡ se omiten. Si algún día se cambia a una impresora que
+  sí acepte acentos, se ajustan setting.printer_codepage (n de ESC t n) y setting.printer_charset (p. ej. 2 + IBM850).
 - Nunca se envía corte (GS V) ni apertura de cajón (ESC p). Cada ticket termina con 4 saltos de línea.
 - Solo se usan negrita y doble alto (no doble ancho, que bajaría a 16 columnas). Textos largos se parten por palabras
   (nombres, observaciones, pie) o se recortan (nombre de producto o plan junto a un monto); los montos van a la derecha.
 
-### Transporte (setting.printer_transport)
-- serial (por defecto): escribe directo al puerto COM (setting.printer_port). Abrir el puerto obliga a conectar por
-  Bluetooth: si la impresora está apagada o fuera de alcance, el intento falla con un error real. Si la impresora
-  contesta DLE EOT 4, también se detecta "sin papel". Depende del número de COM (si cambia al volver a emparejar,
-  se corrige en Admin). Usa la librería jSerialComm.
-- windows: manda los bytes crudos a la impresora de Windows (setting.printer_name). Windows acepta el trabajo aunque
-  la impresora esté apagada, así que el resultado es "en cola de Windows", no "entregado"; un trabajo atorado puede
-  imprimirse después, al encenderla. Lo único detectable es que la impresora existe y cuántos trabajos hay en su cola.
-- Nunca se puede confirmar que el ticket salió en papel (papel atorado, tapa abierta, impresión ilegible).
+### Conexión: solo por la impresora de Windows
+- Se mandan los bytes crudos a la impresora instalada en Windows (setting.printer_name = PT-210), que ya funciona
+  con el controlador Generic / Text Only sobre el COM4 del Bluetooth.
+- Se evaluó escribir directo al puerto COM y se descartó (V6) tras probar con el equipo real:
+  la librería jSerialComm no puede abrir el COM Bluetooth de esta PC; escribiendo directo, Windows acepta los datos
+  aunque la impresora esté apagada (y los imprime al encenderla); y la impresora no contesta consultas de estado
+  (DLE EOT, GS r, GS I). No detectaba nada más que la cola de Windows.
+- Qué se puede detectar: que la impresora no esté instalada en Windows y que haya trabajos detenidos en su cola.
+- Qué NO se puede detectar: impresora apagada, fuera de alcance o sin papel, ni que el ticket haya salido en papel.
+- Un ticket mandado con la impresora apagada puede salir solo al encenderla: al reimprimir se advierte que podría
+  quedar duplicado.
 
 ### Cola de impresión
 - Imprimir es asíncrono: el cobro y el cierre solo registran el trabajo en print_job y responden; nunca esperan a la impresora.
-- Un solo worker procesa los trabajos en orden, uno a la vez (la impresora acepta una sola conexión). La conexión se
-  reutiliza mientras haya tickets en cola y se libera cuando la cola se vacía.
+- Un solo worker procesa los trabajos en orden, uno a la vez (la impresora acepta una sola conexión).
 - Cada intento tiene timeout (setting.print_timeout_seconds, 20 s). Se reintenta hasta setting.print_retries veces (3),
-  esperando 5, 15 y 30 s. Errores que no se arreglan reintentando (puerto inexistente, charset inválido) fallan de inmediato.
+  esperando 5, 15 y 30 s. Errores que no se arreglan reintentando (impresora no instalada, charset inválido) fallan de inmediato.
 - Al arrancar la app, los trabajos sin terminar se marcan como fallidos; se reimprimen a mano si hace falta.
 - Con setting.print_enabled = 0 no se encola nada; reimprimir o probar responde IMPRESION_DESACTIVADA.
 
@@ -110,13 +112,14 @@ Estas son las decisiones por defecto. Si cambian, se actualiza este archivo prim
 - Reimpresión: desde Admin > Turnos (historial, solo Administrador), marcada como "COPIA". Un turno abierto no se reimprime.
 
 ### Reglas de impresión
-- Una falla de impresión (sin papel, impresora apagada) NUNCA revierte el cobro ni el cierre. Se avisa en pantalla y se puede reimprimir.
-  - Caja: el aviso del cobro dice que el ticket está en cola; si al final falla, aparece otro aviso con el folio.
-  - Cierre: la pantalla espera hasta 25 s el resultado del ticket antes de cerrar sesión, y avisa si no salió.
+- Una falla de impresión NUNCA revierte el cobro ni el cierre. Se avisa en pantalla y se puede reimprimir.
+  - Caja: el aviso del cobro dice que el ticket se envió ("si no sale, enciéndela y reimprímelo"); si Windows
+    rechaza el trabajo, aparece otro aviso con el folio.
+  - Cierre: la pantalla espera hasta 25 s el resultado del envío antes de cerrar sesión, y avisa si falló.
 - Las ventas del refri no imprimen ticket por ahora (se puede agregar después).
 - Cada impresión se registra en print_job (tipo, referencia, estado, intentos, error, si fue copia, quién la pidió).
-- Admin > Configuración muestra el estado de la impresora (sin abrir la conexión), permite imprimir una prueba con la
-  línea "áéíóúñÑü¿¡$" y configurar conexión, puerto, nombre en Windows, página de códigos, charset y pie del ticket.
+- Admin > Configuración muestra el estado de la impresora, permite imprimir una prueba (incluye la línea
+  "áéíóúñÑü¿¡$", que en la PT-210 sale "aeiounNu$") y configurar nombre en Windows, página de códigos, charset y pie.
 
 ## Roles y permisos
 | Acción | Administrador | Recepción | Entrenador |

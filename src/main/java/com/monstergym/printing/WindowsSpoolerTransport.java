@@ -16,12 +16,12 @@ import java.util.Optional;
 /**
  * Manda los bytes crudos a la impresora instalada en Windows (setting.printer_name) con javax.print.
  * Con el controlador "Generic / Text Only" los bytes pasan sin cambios. Windows acepta el trabajo aunque
- * la impresora esté apagada: el resultado es "en_cola_windows", no "entregado".
+ * la impresora esté apagada (el Bluetooth guarda los datos y los suelta al encenderla): el resultado es
+ * "en_cola_windows", no "entregado".
  */
-class WindowsSpoolerTransport implements PrinterTransport {
+class WindowsSpoolerTransport {
 
-    @Override
-    public TicketPrinter.Delivery send(byte[] data, PrinterConfig config) throws PrinterException {
+    TicketPrinter.Delivery send(byte[] data, PrinterConfig config) throws PrinterException {
         PrintService service = find(config.printerName()).orElseThrow(() -> new PrinterException(
                 "No existe la impresora \"" + config.printerName() + "\" en Windows.", false));
         DocPrintJob job = service.createPrintJob();
@@ -34,8 +34,7 @@ class WindowsSpoolerTransport implements PrinterTransport {
         return TicketPrinter.Delivery.EN_COLA_WINDOWS;
     }
 
-    @Override
-    public TicketPrinter.Probe probe(PrinterConfig config) {
+    TicketPrinter.Probe probe(PrinterConfig config) {
         Optional<PrintService> service = find(config.printerName());
         if (service.isEmpty()) {
             return new TicketPrinter.Probe(false, "No existe la impresora \"" + config.printerName() + "\" en Windows.");
@@ -45,8 +44,8 @@ class WindowsSpoolerTransport implements PrinterTransport {
             return new TicketPrinter.Probe(false, "Hay " + queued.getValue() + " trabajo(s) detenido(s) en la cola de "
                     + "Windows: la impresora puede estar apagada. Al encenderla podrían salir tickets atrasados.");
         }
-        return new TicketPrinter.Probe(null,
-                "Windows acepta trabajos, pero no puede confirmar que la impresora esté encendida.");
+        return new TicketPrinter.Probe(null, "La impresora está instalada en Windows. Windows no puede saber si está "
+                + "encendida: si un ticket no sale, enciéndela y reimprímelo.");
     }
 
     static Optional<PrintService> find(String name) {

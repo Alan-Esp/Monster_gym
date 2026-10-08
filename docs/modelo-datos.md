@@ -129,7 +129,7 @@ sale_item: id, sale_id, product_id, qty (CHECK > 0), unit_price_cents.
 | ref_id | INTEGER | payment.id o shift.id según kind; NULL en 'prueba' |
 | is_copy | INTEGER NOT NULL DEFAULT 0 | 1 = reimpresión (COPIA) |
 | status | TEXT NOT NULL | CHECK IN ('pendiente','enviando','entregado','en_cola_windows','fallido') |
-| transport | TEXT | CHECK IN ('serial','windows','archivo') |
+| transport | TEXT | CHECK IN ('serial','windows','archivo'); hoy solo windows o archivo (dev) |
 | attempts | INTEGER NOT NULL DEFAULT 0 | Intentos hechos |
 | error | TEXT | Último error (también mientras se reintenta) |
 | employee_id | INTEGER FK employee | Quien lo pidió |
@@ -137,8 +137,8 @@ sale_item: id, sale_id, product_id, qty (CHECK > 0), unit_price_cents.
 | finished_at | TEXT | Cuando terminó (entregado, en cola de Windows o fallido) |
 
 V5 reemplazó success/printed_at por status/created_at/finished_at (la impresión es asíncrona).
-- entregado: la impresora recibió los bytes por el puerto COM (o el archivo de desarrollo quedó escrito).
-- en_cola_windows: Windows aceptó el trabajo; no confirma que la impresora esté encendida.
+- entregado: solo en desarrollo (FakePrinter escribió el archivo). Con la impresora real no se puede confirmar.
+- en_cola_windows: Windows aceptó el trabajo; no confirma que la impresora esté encendida (resultado normal con la PT-210).
 - Al arrancar la app, lo que quedó en pendiente o enviando pasa a fallido (no se imprimen tickets viejos por sorpresa).
 Índices: print_job(status, id), print_job(kind, ref_id).
 
@@ -146,9 +146,9 @@ V5 reemplazó success/printed_at por status/created_at/finished_at (la impresió
 key TEXT PK, value TEXT NOT NULL. Valores iniciales:
 gym_name = Monster Gym, capacity = 120, warn_days = 3, manual_access = 1, sound = 1, inside_minutes = 120,
 print_enabled = 1, printer_name = PT-210 (nombre de la impresora en Windows), ticket_chars_per_line = 32, ticket_footer = Gracias por entrenar con nosotros.
-Agregados en V5: printer_transport = serial (serial | windows), printer_port = COM4, printer_codepage = 2 (n de ESC t n),
-printer_charset = IBM850 (charset de Java que corresponde a esa tabla), printer_status_check = 1 (preguntar papel con
-DLE EOT 4), print_timeout_seconds = 20, print_retries = 3.
+Agregados en V5: printer_codepage (n de ESC t n), printer_charset (charset de Java), print_timeout_seconds = 20,
+print_retries = 3 (V5 también creó printer_transport, printer_port y printer_status_check, que V6 borró).
+V6: printer_codepage = 0 y printer_charset = US-ASCII (la PT-210 no sale del modo chino: se imprime sin acentos).
 
 ## Vista v_member_status
 Columnas: member_id, valid_until, days_left, status.

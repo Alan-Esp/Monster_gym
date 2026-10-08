@@ -90,8 +90,8 @@ public final class TicketRenderer {
         String ruler = "1234567890".repeat(t.width() / 10 + 1).substring(0, t.width());
         t.text("Acentos y signos:")
                 .center(ACCENT_SAMPLE)
-                .text("Si ves ? o letras raras, cambia")
-                .text("la página de códigos en Admin.")
+                .text("Si salen letras chinas, pon")
+                .text("US-ASCII en Juego de caracteres")
                 .separator()
                 .text(ruler)
                 .wrap(configLine);
