@@ -1,13 +1,11 @@
 package com.monstergym;
 
-import com.monstergym.common.SearchText;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.MediaType;
 import org.springframework.mock.web.MockHttpSession;
 import org.springframework.test.web.servlet.ResultActions;
 
 import java.time.LocalDate;
-import java.time.ZoneId;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -23,8 +21,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 class MemberTest extends ApiTestBase {
 
-    private final LocalDate hoy = LocalDate.now(ZoneId.of("America/Mexico_City"));
-    private long nextPaymentId = 1000;
+    private final LocalDate hoy = today();
 
     private ResultActions create(MockHttpSession s, Map<String, Object> data) throws Exception {
         return mvc.perform(post("/api/members").session(s).with(csrf())
@@ -44,27 +41,12 @@ class MemberTest extends ApiTestBase {
                 .andExpect(status().isCreated());
     }
 
-    /** Inserta un socio directo en la base; vence = días desde hoy (null = sin membresía). */
-    private void insertarSocio(long id, String number, String name, String phone, Integer vence) {
-        jdbc.update("INSERT INTO member (id, number, full_name, phone, joined_on, search_key) VALUES (?, ?, ?, ?, '2026-01-01', ?)",
-                id, number, name, phone, SearchText.key(name));
-        if (vence == null) return;
-        jdbc.update("INSERT OR IGNORE INTO shift (id, employee_id, opened_at, closed_at, opening_cash_cents) "
-                + "VALUES (900, 1, '2026-01-01T08:00:00', '2026-01-01T20:00:00', 0)");
-        long pid = nextPaymentId++;
-        jdbc.update("INSERT INTO payment (id, member_id, plan_id, amount_cents, method, shift_id, employee_id, paid_at) "
-                + "VALUES (?, ?, 3, 30000, 'efectivo', 900, 1, '2026-01-01T09:00:00')", pid, id);
-        LocalDate fin = hoy.plusDays(vence);
-        jdbc.update("INSERT INTO membership (member_id, plan_id, payment_id, starts_on, ends_on) VALUES (?, 3, ?, ?, ?)",
-                id, pid, fin.minusDays(29).toString(), fin.toString());
-    }
-
     private void socios() {
-        insertarSocio(1, "0412", "Daniela Ortega", "5512348890", 21);    // activa
-        insertarSocio(2, "0087", "Luis Fernando Cruz", "5590871123", 2); // por vencer
-        insertarSocio(3, "0305", "Óscar Galindo", "5511883920", -2);     // vencida
-        insertarSocio(4, "0276", "Ricardo Peña", "5522096618", 15);      // activa
-        insertarSocio(5, "0500", "Hugo Navarro", null, null);            // vencida (sin membresía)
+        insertMember(1, "0412", "Daniela Ortega", "5512348890", 21);    // activa
+        insertMember(2, "0087", "Luis Fernando Cruz", "5590871123", 2); // por vencer
+        insertMember(3, "0305", "Óscar Galindo", "5511883920", -2);     // vencida
+        insertMember(4, "0276", "Ricardo Peña", "5522096618", 15);      // activa
+        insertMember(5, "0500", "Hugo Navarro", null, null);            // vencida (sin membresía)
     }
 
     private ResultActions buscar(String query) throws Exception {
@@ -83,7 +65,7 @@ class MemberTest extends ApiTestBase {
                 .andExpect(jsonPath("$.payment").doesNotExist());
         create(s, socio("Segundo Socio", null)).andExpect(jsonPath("$.member.number").value("0002"));
 
-        insertarSocio(50, "0500", "Hugo Navarro", null, null);
+        insertMember(50, "0500", "Hugo Navarro", null, null);
         create(s, socio("Tercer Socio", null)).andExpect(jsonPath("$.member.number").value("0501"));
     }
 

@@ -7,7 +7,7 @@
 - Roles: A = Administrador, R = Recepción, E = Entrenador.
 - Errores: HTTP adecuado y cuerpo
   { "error": { "code": "SIN_TURNO", "message": "Abre un turno antes de cobrar." } }
-  Códigos usados: NO_AUTENTICADO (401), SIN_PERMISO (403), CSRF_INVALIDO (403, falta o no coincide X-XSRF-TOKEN), NO_ENCONTRADO (404), VALIDACION (422, con "fields"), SIN_TURNO (409), TURNO_ABIERTO (409), STOCK_INSUFICIENTE (409), SOCIO_VENCIDO (409, requiere confirmación), DOBLE_REGISTRO (409, requiere confirmación), CUENTA_BLOQUEADA (423, tras 5 intentos fallidos; 15 minutos), PAGO_CANCELADO (409), TURNO_CERRADO (409, no se cancela un pago de un turno cerrado), NUMERO_AGOTADO (409, se pasó del socio 9999).
+  Códigos usados: NO_AUTENTICADO (401), SIN_PERMISO (403), CSRF_INVALIDO (403, falta o no coincide X-XSRF-TOKEN), NO_ENCONTRADO (404), VALIDACION (422, con "fields"), SIN_TURNO (409), TURNO_ABIERTO (409), STOCK_INSUFICIENTE (409), SOCIO_VENCIDO (409, requiere confirmación), DOBLE_REGISTRO (409, requiere confirmación), CUENTA_BLOQUEADA (423, tras 5 intentos fallidos; 15 minutos), PAGO_CANCELADO (409), TURNO_CERRADO (409, no se cancela un pago de un turno cerrado), NUMERO_AGOTADO (409, se pasó del socio 9999), ACCESO_MANUAL_DESACTIVADO (409, setting.manual_access = 0).
 - Acciones que requieren confirmación (SOCIO_VENCIDO, DOBLE_REGISTRO) se repiten con "confirm": true.
 
 ## Autenticación y turnos
@@ -27,10 +27,15 @@ Respuesta:
 { "aforo": {"inside": 23, "capacity": 120, "peakHour": "18:00"},
   "visitsToday": 84, "visitsDeltaVsYesterday": 12,
   "activeMembers": 412, "expiredCount": 2, "expiringCount": 4,
-  "visitsByHour": [4,9,12,...], "currentHourIndex": 10,
+  "firstHour": 6, "visitsByHour": [4,9,12,...] (16 valores, de 06:00 a 21:00), "currentHourIndex": 10 (-1 fuera de horario),
   "topProducts": [{"name": "Bebida isotónica", "sold": 11}],
   "recentVisits": [{"time":"16:38","memberId":412,"number":"0412","name":"Daniela Ortega","method":"huella","status":"activa"}],
   "income": {"membershipsCents": 0, "fridgeCents": 0, "totalCents": 0} }
+- aforo.inside: visitas de los últimos setting.inside_minutes minutos; peakHour: hora con más visitas hoy (null si no hay).
+- visitsDeltaVsYesterday: visitas de hoy menos las de ayer hasta la misma hora.
+- activeMembers = activa + por_vencer; expiredCount = todos los vencidos (incluye sin membresía); expiringCount = por_vencer.
+- recentVisits: últimas 6 entradas; status es el estado al momento de entrar.
+- income: cobros y ventas de hoy (todos los turnos), sin cancelados.
 
 ## Socios
 | Método y ruta | Roles | Descripción |
@@ -62,6 +67,14 @@ Solo se cancela un pago si su turno sigue abierto.
 ## Visitas
 | POST /api/visits | A, R | { memberId, method: "manual", confirm? } |
 | GET /api/visits?date=YYYY-MM-DD | todos | Bitácora del día y % de huella |
+
+POST /api/visits: sin confirm responde 409 SOCIO_VENCIDO (socio vencido o sin membresía) o DOBLE_REGISTRO
+(el mismo socio entró hace menos de 5 minutos). Si aplican ambos, el código es SOCIO_VENCIDO y el mensaje
+menciona los dos; un solo "confirm": true los cubre. Respuesta:
+{ id, checkedInAt, method, statusAtEntry, member: { id, number, fullName, plan, validUntil, daysLeft } }.
+GET /api/visits (date por defecto hoy) responde
+{ date, items: [{ id, time, checkedInAt, memberId, number, name, method, status }], total, fingerprintPct,
+  insideNow, weekCount (desde el lunes), manualAccess }.
 
 ## Refri
 | GET /api/products | todos | Con stock, capacidad, vendido hoy y bandera lowStock/outOfStock |
