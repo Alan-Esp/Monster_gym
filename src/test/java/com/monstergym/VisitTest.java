@@ -111,6 +111,17 @@ class VisitTest extends ApiTestBase {
     }
 
     @Test
+    void dobleRegistro_unaVisitaConFechaFuturaNoOcultaLaReciente() throws Exception {
+        // Puede pasar si el reloj de la PC se adelantó y luego se corrigió
+        insertMember(1, "0412", "Daniela Ortega", null, 21);
+        visita(1, now().plusHours(3), "huella");
+        visita(1, now().minusMinutes(2), "manual");
+        entrada(loginAs("recepcion"), 1, null)
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.error.code").value("DOBLE_REGISTRO"));
+    }
+
+    @Test
     void dobleRegistro_esPorSocio() throws Exception {
         insertMember(1, "0412", "Daniela Ortega", null, 21);
         insertMember(2, "0087", "Luis Cruz", null, 21);

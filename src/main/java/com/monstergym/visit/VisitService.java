@@ -67,9 +67,9 @@ public class VisitService {
                     : "La membresía de " + member.fullName() + " venció el "
                             + LocalDate.parse(status.validUntil()).format(DAY_MONTH) + ".");
         }
-        visits.lastVisitAt(memberId).map(Times::parse).ifPresent(last -> {
+        visits.lastVisitAt(memberId, Times.format(now)).map(Times::parse).ifPresent(last -> {
             Duration since = Duration.between(last, now);
-            if (since.compareTo(DOUBLE_ENTRY_WINDOW) < 0 && !since.isNegative()) {
+            if (since.compareTo(DOUBLE_ENTRY_WINDOW) < 0) {
                 long min = since.toMinutes();
                 codes.add("DOBLE_REGISTRO");
                 warnings.add(member.fullName() + " ya registró entrada a las " + Times.format(last).substring(11, 16)

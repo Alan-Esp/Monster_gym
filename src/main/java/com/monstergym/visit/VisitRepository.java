@@ -38,9 +38,11 @@ public class VisitRepository {
         this.jdbc = jdbc;
     }
 
-    public Optional<String> lastVisitAt(long memberId) {
+    /** Última entrada del socio hasta upTo (inclusive); ignora registros con fecha futura. */
+    public Optional<String> lastVisitAt(long memberId, String upTo) {
         return Optional.ofNullable(jdbc.queryForObject(
-                "SELECT MAX(checked_in_at) FROM visit WHERE member_id = ?", String.class, memberId));
+                "SELECT MAX(checked_in_at) FROM visit WHERE member_id = ? AND checked_in_at <= ?",
+                String.class, memberId, upTo));
     }
 
     public long insert(long memberId, String checkedInAt, String method, String statusAtEntry, long employeeId) {
