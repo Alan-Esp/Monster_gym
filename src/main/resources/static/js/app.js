@@ -10,12 +10,87 @@
   const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
   /* ---------- Navegación ---------- */
-  const NAV_PARENT = { nuevo: 'socios' };
+  const NAV_PARENT = { nuevo: 'socios', cierre: 'caja' };
   function go(screen) {
     $$('.screen').forEach(s => s.classList.toggle('is-active', s.dataset.screen === screen));
     const navKey = NAV_PARENT[screen] || screen;
     $$('#nav .pill').forEach(p => p.classList.toggle('is-active', p.dataset.go === navKey));
+    if (screen === 'cierre') renderClose();
     window.scrollTo(0, 0);
+  }
+
+  /* ---------- Login y turno ---------- */
+  function showGate(name) {
+    $$('.gate').forEach(g => g.classList.toggle('is-active', g.dataset.gate === name));
+    $('#app').hidden = !!name;
+    window.scrollTo(0, 0);
+  }
+  const hhmm = d => d.toTimeString().slice(0, 5);
+  $('#loginForm').addEventListener('submit', e => { e.preventDefault(); showGate('apertura'); });
+  $('[data-login]').addEventListener('click', () => showGate('apertura'));
+  $('[data-logout]').addEventListener('click', () => showGate('login'));
+  $('#openingCash').addEventListener('input', e => { e.target.value = e.target.value.replace(/[^0-9]/g, ''); });
+  $('#openShift').addEventListener('click', () => {
+    D.shift.openingCash = parseInt($('#openingCash').value, 10) || 0;
+    D.shift.openedAt = new Date();
+    $('#shiftOpenedAt').textContent = hhmm(D.shift.openedAt);
+    showGate(null);
+    go('inicio');
+  });
+  $('#closeShift').addEventListener('click', () => { D.shift.openedAt = null; showGate('login'); });
+
+  /* ---------- Cierre de turno ---------- */
+  const BILLS = [1000, 500, 200, 100, 50, 20], COINS = [10, 5, 2, 1];
+  function renderDenoms() {
+    const row = v => `
+      <div class="denom">
+        <span class="denom__face">$${v}</span>
+        <input class="input denom__qty" inputmode="numeric" data-denom="${v}" value="${D.cashCount[v] || 0}">
+        <span class="denom__sub" data-sub="${v}"></span>
+      </div>`;
+    $('#denoms').innerHTML =
+      '<span class="denoms__group">BILLETES</span>' + BILLS.map(row).join('') +
+      '<span class="denoms__group">MONEDAS</span>' + COINS.map(row).join('');
+    $('#denoms').addEventListener('input', e => {
+      const inp = e.target.closest('[data-denom]');
+      if (!inp) return;
+      inp.value = inp.value.replace(/[^0-9]/g, '');
+      D.cashCount[inp.dataset.denom] = parseInt(inp.value, 10) || 0;
+      renderClose();
+    });
+  }
+  function renderClose() {
+    const sum = (list, m) => list.filter(p => p.method === m).reduce((a, p) => a + p.amount, 0);
+    const memCash = sum(D.payments, 'Efectivo');
+    const expected = D.shift.openingCash + memCash + D.shift.refriCash;
+    let counted = 0;
+    [...BILLS, ...COINS].forEach(v => {
+      const sub = v * (D.cashCount[v] || 0);
+      counted += sub;
+      const el = $(`[data-sub="${v}"]`);
+      if (el) el.textContent = money(sub);
+    });
+    const diff = counted - expected;
+    const opened = D.shift.openedAt || new Date();
+    const mins = Math.max(0, Math.round((Date.now() - opened.getTime()) / 60000));
+
+    $$('[data-opened]').forEach(el => { el.textContent = hhmm(opened); });
+    $('#shiftDuration').textContent = Math.floor(mins / 60) + ':' + String(mins % 60).padStart(2, '0') + ' h';
+    $('#closePayCount').textContent = D.payments.length;
+    $('#countedTotal').textContent = money(counted);
+    $('#closeOpening').textContent = money(D.shift.openingCash);
+    $('#closeMemCash').textContent = money(memCash);
+    $('#closeRefriCash').textContent = money(D.shift.refriCash);
+    $('#closeExpected').textContent = money(expected);
+    $('#closeCounted').textContent = money(counted);
+    $('#closeCard').textContent = money(sum(D.payments, 'Tarjeta') + D.shift.refriCard);
+    $('#closeTransfer').textContent = money(sum(D.payments, 'Transferencia'));
+
+    const state = diff < 0 ? 'is-short' : diff > 0 ? 'is-over' : '';
+    const d = $('#closeDiff'), n = $('#closeDiffNote');
+    d.className = 'diff ' + state; n.className = 'diff-note ' + state;
+    d.textContent = (diff > 0 ? '+' : diff < 0 ? '−' : '') + money(Math.abs(diff));
+    n.textContent = diff < 0 ? 'Falta efectivo' : diff > 0 ? 'Sobra efectivo' : 'Cuadra';
   }
   document.addEventListener('click', e => {
     const el = e.target.closest('[data-go]');
@@ -35,6 +110,7 @@
     $('#greeting').textContent = h < 12 ? 'Buenos días' : h < 19 ? 'Buenas tardes' : 'Buenas noches';
     const date = d.toLocaleDateString('es-MX', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }).toUpperCase();
     $$('[data-date]').forEach(el => { el.textContent = date; });
+    $$('[data-now]').forEach(el => { el.textContent = hhmm(d); });
   }
 
   /* ---------- Estado del lector ---------- */
@@ -330,5 +406,6 @@
   renderPos();
   renderCaja();
   renderAdmin();
+  renderDenoms();
   bindSelections();
 })();

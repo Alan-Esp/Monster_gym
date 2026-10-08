@@ -11,7 +11,82 @@
   <link rel="stylesheet" href="css/styles.css">
 </head>
 <body>
-<div class="app">
+
+<!-- ============ LOGIN ============ -->
+<section class="gate is-active" data-gate="login">
+  <div class="login">
+    <div class="login__brand">
+      <img src="assets/logo_monster.jpeg" alt="Monster Gym" class="login__logo">
+      <div class="login__word">MONSTER<br>GYM</div>
+      <span class="login__foot">SISTEMA DE GESTIÓN · RECEPCIÓN</span>
+    </div>
+    <div class="login__side">
+      <form class="login__form" id="loginForm" autocomplete="off">
+        <div class="page-head__titles">
+          <span class="eyebrow eyebrow--date" data-date></span>
+          <h1 class="h1">Inicia sesión.</h1>
+        </div>
+        <label class="field"><span class="eyebrow">USUARIO</span><input class="input" placeholder="Tu usuario"></label>
+        <label class="field"><span class="eyebrow">CONTRASEÑA</span><input class="input" type="password" placeholder="••••••••"></label>
+        <button class="btn btn--primary btn--lg btn--block" type="submit">Entrar</button>
+        <div class="or"><span>o</span></div>
+        <button class="btn btn--secondary btn--block" type="button" data-login>Entrar con huella</button>
+      </form>
+    </div>
+  </div>
+</section>
+
+<!-- ============ APERTURA DE TURNO ============ -->
+<section class="gate" data-gate="apertura">
+  <header class="topbar">
+    <div class="brand">
+      <img src="assets/logo_monster.jpeg" alt="Monster Gym">
+      <span class="brand__name">MONSTER<span>GYM</span></span>
+    </div>
+    <div class="topbar__right">
+      <div class="avatar avatar--lime">SR</div>
+      <button class="btn-sm" data-logout>Salir</button>
+    </div>
+  </header>
+  <div class="opening">
+    <div class="page-head__titles">
+      <span class="eyebrow eyebrow--date">APERTURA DE TURNO · <span data-date></span></span>
+      <h1 class="h1 h1--hero">Abre tu turno,<br><span class="lime">Sergio.</span></h1>
+    </div>
+    <div class="card card--pad col" style="gap:18px">
+      <div class="field">
+        <span class="eyebrow">TURNO</span>
+        <div class="pills pills--dark" data-select>
+          <button class="pill pill--fill is-active">Matutino</button>
+          <button class="pill pill--fill">Vespertino</button>
+          <button class="pill pill--fill">Nocturno</button>
+        </div>
+      </div>
+      <div class="summary">
+        <div class="summary__row"><span class="muted">Responsable</span><span>Sergio Ramírez</span></div>
+        <div class="summary__row"><span class="muted">Caja</span><span>Caja 01</span></div>
+        <div class="summary__row" style="border-bottom:0"><span class="muted">Hora de apertura</span><span class="mono" data-now></span></div>
+      </div>
+    </div>
+    <div class="card card--pad col" style="gap:14px">
+      <div class="col" style="gap:4px"><h2 class="h2">Fondo inicial de caja</h2><span class="muted" style="font-size:13px">Efectivo con el que inicia el turno</span></div>
+      <label class="money-input"><span>$</span><input id="openingCash" inputmode="numeric" value="500"></label>
+    </div>
+    <div class="card card--pad-sm row" style="gap:16px;flex-wrap:wrap">
+      <div class="col" style="gap:4px;flex:1;min-width:200px">
+        <span class="eyebrow">ÚLTIMO CIERRE</span>
+        <span style="font-size:14px">Ayer, 22:04 · Ana López · Vespertino</span>
+      </div>
+      <div class="col" style="gap:4px;align-items:flex-end">
+        <span class="mono" style="font-size:15px">$7,820</span>
+        <span class="t-a" style="font-size:12px;font-weight:600">Sin diferencia</span>
+      </div>
+    </div>
+    <button class="btn btn--primary btn--xl btn--block" id="openShift">Abrir turno</button>
+  </div>
+</section>
+
+<div class="app" id="app" hidden>
 
   <!-- Barra superior -->
   <header class="topbar">
@@ -31,6 +106,7 @@
       </nav>
     </div>
     <div class="topbar__right">
+      <button class="shift-chip" data-go="cierre"><span class="status__dot"></span>Turno abierto · <span class="mono" id="shiftOpenedAt">--:--</span></button>
       <div class="status" id="fpStatus"><span class="status__dot"></span><span id="fpLabel">Sin huella</span></div>
       <div class="avatar avatar--lime" id="userInitials">SR</div>
     </div>
@@ -309,8 +385,54 @@
               <div class="summary__row"><span class="muted">Refri</span><span class="mono" data-inc="refri"></span></div>
               <div class="summary__total"><span style="font-weight:700">Total cobrado</span><span class="summary__total-value"><span data-inc="total"></span> <small>MXN</small></span></div>
             </div>
-            <button class="btn btn--primary btn--lg">Realizar corte del día</button>
+            <button class="btn btn--primary btn--lg" data-go="cierre">Realizar corte del día</button>
           </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ CIERRE DE TURNO ============ -->
+    <section class="screen" data-screen="cierre">
+      <div class="back-head">
+        <button class="btn-round btn-round--lg" data-go="caja" aria-label="Volver">←</button>
+        <div class="page-head__titles"><span class="eyebrow">TURNO MATUTINO · SERGIO RAMÍREZ · CAJA 01</span><h1 class="h1">Cierre de turno</h1></div>
+      </div>
+      <div class="stats">
+        <div class="card stat"><span class="stat__label">Apertura</span><span class="stat__value stat__value--md" data-opened>--:--</span></div>
+        <div class="card stat"><span class="stat__label">Duración</span><span class="stat__value stat__value--md" id="shiftDuration">0 h</span></div>
+        <div class="card stat"><span class="stat__label">Pagos registrados</span><span class="stat__value stat__value--md" id="closePayCount">0</span></div>
+        <div class="card card--lime stat"><span class="stat__label">Total cobrado</span><span class="stat__value stat__value--md" data-inc="total">$0</span></div>
+      </div>
+      <div class="wrap-row">
+        <div class="grow-3 card card--pad col" style="gap:18px">
+          <div class="section-head"><h2 class="h2">Conteo de efectivo</h2><span class="muted" style="font-size:12px">Cantidad de piezas en caja</span></div>
+          <div class="denoms" id="denoms"></div>
+          <div class="divider"></div>
+          <div class="total-row"><span class="muted" style="font-size:14px">Total contado</span><span class="total-row__value" id="countedTotal">$0</span></div>
+        </div>
+        <div class="grow-side stack-16">
+          <div class="card card--pad col" style="gap:18px">
+            <h2 class="h2">Efectivo esperado</h2>
+            <div class="summary">
+              <div class="summary__row"><span class="muted">Fondo inicial</span><span class="mono" id="closeOpening">$0</span></div>
+              <div class="summary__row"><span class="muted">Membresías en efectivo</span><span class="mono" id="closeMemCash">$0</span></div>
+              <div class="summary__row"><span class="muted">Refri en efectivo</span><span class="mono" id="closeRefriCash">$0</span></div>
+              <div class="summary__row"><span style="font-weight:700">Esperado en caja</span><span class="mono" style="font-weight:500" id="closeExpected">$0</span></div>
+              <div class="summary__row"><span class="muted">Contado</span><span class="mono" id="closeCounted">$0</span></div>
+              <div class="summary__total"><span style="font-weight:700">Diferencia</span><span class="diff" id="closeDiff">$0</span></div>
+            </div>
+            <span class="diff-note" id="closeDiffNote">Cuadra</span>
+          </div>
+          <div class="card card--pad-sm col" style="gap:4px">
+            <h2 class="h2" style="margin-bottom:8px">Cobros sin efectivo</h2>
+            <div class="list-row"><span style="flex:1">Tarjeta</span><span class="mono" id="closeCard">$0</span></div>
+            <div class="list-row" style="border-bottom:0"><span style="flex:1">Transferencia</span><span class="mono" id="closeTransfer">$0</span></div>
+          </div>
+          <label class="card card--pad-sm field">
+            <span class="eyebrow">OBSERVACIONES</span>
+            <textarea class="input input--area" rows="3" placeholder="Opcional"></textarea>
+          </label>
+          <button class="btn btn--primary btn--xl btn--block" id="closeShift">Cerrar turno</button>
         </div>
       </div>
     </section>
