@@ -14,7 +14,8 @@ Estas son las decisiones por defecto. Si cambian, se actualiza este archivo prim
 - Cobrar un plan crea un payment y una membership.
 - Si la membresía sigue vigente (valid_until >= hoy): la nueva empieza al día siguiente del vencimiento actual.
 - Si ya venció o no existe: la nueva empieza hoy.
-- ends_on = starts_on + (plan.days - 1) días.
+- ends_on = starts_on + plan.days días (ejemplo: Mensual cobrado el 8 de oct termina el 7 de nov; Semanal del 8 al 15 de oct).
+- Las membresías cobradas antes de este cambio conservan su fecha original.
 - El precio cobrado es el del plan al momento del cobro y se guarda en el payment.
 - No se puede cobrar sin un turno abierto.
 - Métodos de pago: efectivo, tarjeta, transferencia.

@@ -128,9 +128,9 @@ class MemberTest extends ApiTestBase {
         data.put("method", "efectivo");
         create(s, data)
                 .andExpect(status().isCreated())
-                .andExpect(jsonPath("$.member.status").value("activa")) // 7 días: quedan 6 > warn_days (3)
+                .andExpect(jsonPath("$.member.status").value("activa")) // 7 días: quedan 7 > warn_days (3)
                 .andExpect(jsonPath("$.member.plan").value("Semanal"))
-                .andExpect(jsonPath("$.member.validUntil").value(hoy.plusDays(6).toString()))
+                .andExpect(jsonPath("$.member.validUntil").value(hoy.plusDays(7).toString()))
                 .andExpect(jsonPath("$.payment.amountCents").value(12000))
                 .andExpect(jsonPath("$.payment.member.number").value("0001"));
     }

@@ -75,7 +75,7 @@ class PaymentTest extends ApiTestBase {
                 .andExpect(jsonPath("$.member.fullName").value("Socio Uno"))
                 .andExpect(jsonPath("$.plan.name").value("Mensual"))
                 .andExpect(jsonPath("$.startsOn").value(hoy.toString()))
-                .andExpect(jsonPath("$.endsOn").value(hoy.plusDays(29).toString()))
+                .andExpect(jsonPath("$.endsOn").value(hoy.plusDays(30).toString()))
                 .andExpect(jsonPath("$.amountCents").value(30000))
                 .andExpect(jsonPath("$.method").value("efectivo"))
                 .andExpect(jsonPath("$.employeeName").value("Rocío Recepción"))
@@ -90,7 +90,7 @@ class PaymentTest extends ApiTestBase {
         charge(recepcionConTurno(), 1, SEMANAL, "tarjeta")
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.startsOn").value(hoy.plusDays(11).toString()))
-                .andExpect(jsonPath("$.endsOn").value(hoy.plusDays(17).toString()));
+                .andExpect(jsonPath("$.endsOn").value(hoy.plusDays(18).toString()));
     }
 
     @Test
@@ -106,7 +106,7 @@ class PaymentTest extends ApiTestBase {
         charge(recepcionConTurno(), 1, SEMANAL, "transferencia")
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.startsOn").value(hoy.toString()))
-                .andExpect(jsonPath("$.endsOn").value(hoy.plusDays(6).toString()));
+                .andExpect(jsonPath("$.endsOn").value(hoy.plusDays(7).toString()));
     }
 
     @Test
