@@ -83,6 +83,11 @@
       list: () => request('GET', '/api/plans'),
       updatePrice: (id, priceCents) => request('PUT', '/api/plans/' + encodeURIComponent(id), { priceCents })
     },
+    visits: {
+      register: data => request('POST', '/api/visits', data),
+      day: date => request('GET', '/api/visits' + (date ? '?date=' + encodeURIComponent(date) : ''))
+    },
+    dashboard: () => request('GET', '/api/dashboard'),
     payments: {
       create: data => request('POST', '/api/payments', data),
       currentShift: () => request('GET', '/api/payments?shift=current'),

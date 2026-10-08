@@ -119,7 +119,7 @@
       <div class="page-head">
         <div class="page-head__titles">
           <span class="eyebrow eyebrow--date" data-date></span>
-          <h1 class="h1 h1--hero"><span id="greeting">Buenas tardes</span>,<br><span class="lime">Sergio.</span></h1>
+          <h1 class="h1 h1--hero"><span id="greeting">Buenas tardes</span>,<br><span class="lime" data-user-first>Sergio.</span></h1>
         </div>
         <div class="hero-clock">
           <span class="hero-clock__time"><span id="clock">--:--</span><span class="hero-clock__ampm" id="ampm"></span></span>
@@ -154,8 +154,8 @@
             </div>
           </article>
 
-          <article class="slide slide--dark" data-label="Ingresos del turno">
-            <span class="slide__kicker">INGRESOS DEL TURNO</span>
+          <article class="slide slide--dark" data-label="Ingresos de hoy">
+            <span class="slide__kicker">INGRESOS DE HOY</span>
             <span class="slide__money" data-inc="total">$0</span>
             <div class="col" style="gap:12px">
               <div class="split"><div class="split__a" id="memSplit"></div><div class="split__b"></div></div>
@@ -220,7 +220,7 @@
           <div class="card scanner">
             <div class="rings" id="rings"><i></i><i></i><i></i><i></i></div>
             <div class="col" style="gap:8px">
-              <span class="scanner__title">Esperando huella</span>
+              <span class="scanner__title" id="scanTitle">Esperando huella</span>
               <span class="scanner__sub" id="scanSub">Lector desconectado · usa el acceso manual</span>
             </div>
           </div>
@@ -229,7 +229,7 @@
         <div class="grow-side stack-16">
           <div class="card card--pad-sm stack-14">
             <div class="col" style="gap:4px"><h2 class="h2">Acceso manual</h2><span class="muted" style="font-size:13px">Sin huella: busca al socio por nombre o ID</span></div>
-            <input class="input" placeholder="Buscar socio…">
+            <input class="input" id="accessSearch" autocomplete="off" placeholder="Buscar socio…">
           </div>
           <div class="card card--pad-sm col" style="gap:6px">
             <h2 class="h2" style="margin-bottom:8px">Últimas entradas</h2>
@@ -302,7 +302,7 @@
         <div class="card card--lime stat"><span class="stat__label">Hoy</span><span class="stat__value" data-visits-today>84</span></div>
         <div class="card stat"><span class="stat__label">Dentro ahora</span><span class="stat__value" id="insideNow">23</span></div>
         <div class="card stat"><span class="stat__label">Con huella</span><span class="stat__value" id="fpPct">0%</span></div>
-        <div class="card stat"><span class="stat__label">Esta semana</span><span class="stat__value">512</span></div>
+        <div class="card stat"><span class="stat__label">Esta semana</span><span class="stat__value" id="visitsWeek">512</span></div>
       </div>
       <div class="card table">
         <div class="table__inner">

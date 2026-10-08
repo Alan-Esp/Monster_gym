@@ -28,6 +28,9 @@
     const navKey = NAV_PARENT[screen] || screen;
     $$('#nav .pill').forEach(p => p.classList.toggle('is-active', p.dataset.go === navKey));
     if (screen === 'cierre') renderClose();
+    if (screen === 'inicio') loadHome();
+    if (screen === 'acceso') loadAccess();
+    if (screen === 'visitas') loadVisits();
     if (screen === 'socios') loadMembers();
     if (screen === 'nuevo') resetNewMember();
     if (screen === 'caja') loadCaja();
@@ -219,44 +222,70 @@
     const refri = D.products.reduce((a, p) => a + p.sold * p.price, 0);
     return { mem, refri, total: mem + refri };
   }
-  function renderIncome() {
-    const t = totals();
-    $$('[data-inc="total"]').forEach(el => { el.textContent = money(t.total); });
-    $$('[data-inc="mem"]').forEach(el => { el.textContent = money(t.mem); });
-    $$('[data-inc="refri"]').forEach(el => { el.textContent = money(t.refri); });
-    $('#memSplit').style.width = Math.round(t.mem / t.total * 100) + '%';
+  /* t: { mem, refri, total } en pesos; solo actualiza los totales dentro de root (cada pantalla tiene su fuente) */
+  function renderIncome(t, root) {
+    $$('[data-inc="total"]', root).forEach(el => { el.textContent = money(t.total); });
+    $$('[data-inc="mem"]', root).forEach(el => { el.textContent = money(t.mem); });
+    $$('[data-inc="refri"]', root).forEach(el => { el.textContent = money(t.refri); });
+    const split = $('#memSplit', root);
+    if (split) split.style.width = (t.total ? Math.round(t.mem / t.total * 100) : 0) + '%';
   }
 
   /* ---------- Inicio ---------- */
-  function renderHome() {
-    const a = D.aforo, pct = Math.round(a.inside / a.capacity * 100);
+  async function loadHome() {
+    try {
+      renderHome(await API.dashboard());
+    } catch (err) { /* 401 ya muestra el login; otros errores: se reintenta en el siguiente ciclo */ }
+  }
+  // Actualiza Inicio cada minuto mientras esté visible
+  setInterval(() => {
+    if (!$('#app').hidden && $('[data-screen="inicio"]').classList.contains('is-active')) loadHome();
+  }, 60000);
+
+  /* d: respuesta de GET /api/dashboard */
+  function renderHome(d) {
+    const a = d.aforo, pct = a.capacity ? Math.round(a.inside / a.capacity * 100) : 0;
     $('#aforoIn').textContent = a.inside;
     $('#aforoCap').textContent = a.capacity;
-    $('#aforoFill').style.width = pct + '%';
+    $('#aforoFill').style.width = Math.min(pct, 100) + '%';
     $('#aforoPct').textContent = pct + '% de capacidad';
-    $('#aforoPeak').textContent = 'Pico ' + a.peak;
-    $('#visitsToday').textContent = D.visitsToday;
-    $('#visitsDelta').textContent = D.visitsDelta;
-    $('#activeMembers').textContent = D.activeMembers;
-    $('#countExpired').textContent = D.members.filter(m => m.k === 'v').length;
-    $('#countSoon').textContent = D.members.filter(m => m.k === 'p').length;
+    $('#aforoPeak').textContent = a.peakHour ? 'Pico ' + a.peakHour : 'Sin visitas hoy';
+    $('#visitsToday').textContent = d.visitsToday;
+    const delta = d.visitsDeltaVsYesterday;
+    $('#visitsDelta').textContent = (delta > 0 ? '+' : delta < 0 ? '−' : '') + Math.abs(delta) + ' vs. ayer';
+    $('#activeMembers').textContent = d.activeMembers;
+    $('#countExpired').textContent = d.expiredCount;
+    $('#countSoon').textContent = d.expiringCount;
 
-    const max = Math.max(...D.visitsByHour);
-    $('#hourBars').innerHTML = D.visitsByHour.map((v, i) =>
-      `<div class="hours__bar${i === D.currentHourIndex ? ' is-now' : ''}" style="height:${Math.round(v / max * 100)}%"></div>`).join('');
+    const max = Math.max(...d.visitsByHour, 1);
+    $('#hourBars').innerHTML = d.visitsByHour.map((v, i) =>
+      `<div class="hours__bar${i === d.currentHourIndex ? ' is-now' : ''}" style="height:${Math.round(v / max * 100)}%"></div>`).join('');
+    const hourLabel = h => String(h).padStart(2, '0') + ':00';
+    const last = d.firstHour + d.visitsByHour.length - 1;
+    $$('.hours__axis span').forEach((el, i, all) => {
+      el.textContent = hourLabel(Math.round(d.firstHour + (last - d.firstHour) * i / (all.length - 1)));
+    });
 
-    $('#topProducts').innerHTML = [...D.products].sort((x, y) => y.sold - x.sold).slice(0, 3).map((p, i) => `
-      <div class="top-list__row"><span class="top-list__n">0${i + 1}</span><span class="top-list__name">${esc(p.name)}</span><span class="top-list__units">${p.sold}</span></div>`).join('');
+    $('#topProducts').innerHTML = d.topProducts.length ? d.topProducts.map((p, i) => `
+      <div class="top-list__row"><span class="top-list__n">0${i + 1}</span><span class="top-list__name">${esc(p.name)}</span><span class="top-list__units">${p.sold}</span></div>`).join('')
+      : '<div class="top-list__row"><span class="top-list__name">Sin ventas hoy</span></div>';
 
-    $('#recentGrid').innerHTML = D.visitsLog.slice(0, 6).map(v => `
+    $('#recentGrid').innerHTML = d.recentVisits.length ? d.recentVisits.map(v => {
+      const k = STATUS_K[v.status];
+      return `
       <div class="recent">
-        <div class="avatar avatar--42 avatar--ring t-${v.k}"><span style="color:#c9cec3">${initials(v.name)}</span></div>
+        <div class="avatar avatar--42 avatar--ring t-${k}"><span style="color:#c9cec3">${esc(initials(v.name))}</span></div>
         <div class="col" style="gap:3px;min-width:0;flex:1">
           <span class="recent__name ellipsis">${esc(v.name)}</span>
-          <span class="recent__status t-${v.k}">Membresía ${STATUS[v.k].toLowerCase()}</span>
+          <span class="recent__status t-${k}">Membresía ${STATUS[k].toLowerCase()}</span>
         </div>
         <span class="recent__time">${v.time}</span>
-      </div>`).join('');
+      </div>`;
+    }).join('') : '<div class="empty">Aún no hay entradas</div>';
+
+    const inc = d.income;
+    renderIncome({ mem: pesos(inc.membershipsCents), refri: pesos(inc.fridgeCents), total: pesos(inc.totalCents) },
+      $('[data-screen="inicio"]'));
   }
 
   /* ---------- Carrusel ---------- */
@@ -311,10 +340,91 @@
   }
 
   /* ---------- Acceso ---------- */
-  function renderAccess() {
-    $('#lastEntries').innerHTML = D.visitsLog.slice(0, 5).map(v => `
-      <div class="list-row"><span class="list-row__time">${v.time}</span><span class="ellipsis" style="flex:1">${esc(v.name)}</span><span style="font-size:12px;color:var(--dim)">${v.method}</span></div>`).join('');
+  const METHOD_ENTRY = { huella: 'Huella', manual: 'Manual' };
+
+  /**
+   * Busca el socio escrito en input (nombre, número o teléfono). Devuelve el socio si hay una sola
+   * coincidencia o el número exacto; si no, muestra el aviso en el campo y devuelve null. (Acceso y Caja)
+   */
+  async function pickMember(input) {
+    const q = input.value.trim();
+    if (!q) return null;
+    try {
+      const data = await API.members.list({ q });
+      const digits = q.replace(/\D/g, '');
+      const exact = digits && digits.length === q.replace(/[#\s]/g, '').length
+        ? data.items.find(m => m.number === digits.padStart(4, '0')) : null;
+      if (exact || data.items.length === 1) return exact || data.items[0];
+      input.setCustomValidity(data.total === 0 ? 'No se encontró ningún socio.'
+        : `${data.total} socios coinciden: escribe más o usa el número de socio.`);
+      input.reportValidity();
+    } catch (err) {
+      if (err.status !== 401) alert(err.message);
+    }
+    return null;
   }
+
+  async function loadAccess() {
+    try {
+      renderAccess(await API.visits.day());
+    } catch (err) {
+      if (err.status !== 401) $('#lastEntries').innerHTML = `<div class="empty">${esc(err.message)}</div>`;
+    }
+  }
+
+  /* day: respuesta de GET /api/visits (hoy) */
+  function renderAccess(day) {
+    $('#lastEntries').innerHTML = day.items.length ? day.items.slice(0, 5).map(v => `
+      <div class="list-row"><span class="list-row__time">${v.time}</span><span class="ellipsis" style="flex:1">${esc(v.name)}</span><span style="font-size:12px;color:var(--dim)">${METHOD_ENTRY[v.method]}</span></div>`).join('')
+      : '<div class="empty">Aún no hay entradas hoy</div>';
+    const input = $('#accessSearch');
+    const canRegister = currentUser && canOpenShift(currentUser);
+    input.disabled = !canRegister || !day.manualAccess;
+    input.placeholder = !canRegister ? 'Tu rol no registra entradas'
+      : !day.manualAccess ? 'Acceso manual desactivado en Configuración' : 'Buscar socio…';
+  }
+
+  /* Resultado de la entrada en la tarjeta del lector: verde activa, ámbar por vencer, rojo vencida */
+  let scanTimer;
+  const SCAN_CLASSES = ['t-a', 't-p', 't-v'];
+  function showEntry(v) {
+    const k = STATUS_K[v.statusAtEntry], m = v.member;
+    clearTimeout(scanTimer);
+    [$('#rings'), $('#scanTitle')].forEach(el => { el.classList.remove(...SCAN_CLASSES); el.classList.add('t-' + k); });
+    $('#scanTitle').textContent = m.fullName;
+    const vigencia = !m.validUntil ? 'sin membresía pagada'
+      : (k === 'v' ? 'venció el ' : 'vence el ') + fmtDay(m.validUntil);
+    $('#scanSub').textContent = `Entrada registrada ${v.checkedInAt.slice(11, 16)} · Membresía ${STATUS[k].toLowerCase()} · ${vigencia}`;
+    scanTimer = setTimeout(resetScan, 6000);
+  }
+  function resetScan() {
+    [$('#rings'), $('#scanTitle')].forEach(el => el.classList.remove(...SCAN_CLASSES));
+    $('#scanTitle').textContent = 'Esperando huella';
+    renderFingerprint();
+  }
+
+  async function registerEntry(member, confirm) {
+    try {
+      const v = await API.visits.register({ memberId: member.id, method: 'manual', confirm: !!confirm });
+      $('#accessSearch').value = '';
+      showEntry(v);
+      loadAccess();
+    } catch (err) {
+      // Socio vencido o doble registro: quien atiende confirma explícitamente
+      if (!confirm && (err.code === 'SOCIO_VENCIDO' || err.code === 'DOBLE_REGISTRO')) {
+        if (window.confirm(err.message)) registerEntry(member, true);
+      } else if (err.status !== 401) {
+        alert(err.message);
+      }
+    }
+  }
+  $('#accessSearch').addEventListener('input', e => e.target.setCustomValidity(''));
+  $('#accessSearch').addEventListener('keydown', async e => {
+    if (e.key !== 'Enter') return;
+    e.preventDefault();
+    const member = await pickMember(e.target);
+    if (member) registerEntry(member, false);
+  });
 
   /* ---------- Socios ---------- */
   // Pestaña → valor de status en la API (counts usa la misma clave)
@@ -362,19 +472,31 @@
   }
 
   /* ---------- Visitas ---------- */
-  function renderVisits() {
-    const fp = D.visitsLog.filter(v => v.method === 'Huella').length;
-    $('#fpPct').textContent = Math.round(fp / D.visitsLog.length * 100) + '%';
-    $$('[data-visits-today]').forEach(el => { el.textContent = D.visitsToday; });
-    $('#insideNow').textContent = D.aforo.inside;
-    $('#visitsTable').innerHTML = D.visitsLog.map(v => `
+  async function loadVisits() {
+    try {
+      renderVisits(await API.visits.day());
+    } catch (err) {
+      if (err.status !== 401) $('#visitsTable').innerHTML = `<div class="empty">${esc(err.message)}</div>`;
+    }
+  }
+
+  /* day: respuesta de GET /api/visits */
+  function renderVisits(day) {
+    $('#fpPct').textContent = day.fingerprintPct + '%';
+    $$('[data-visits-today]').forEach(el => { el.textContent = day.total; });
+    $('#insideNow').textContent = day.insideNow;
+    $('#visitsWeek').textContent = day.weekCount;
+    $('#visitsTable').innerHTML = day.items.length ? day.items.map(v => {
+      const k = STATUS_K[v.status];
+      return `
       <div class="table__row cols-visitas">
         <span class="mono" style="font-size:13px;color:var(--muted)">${v.time}</span>
-        <span class="cell-person"><span class="avatar avatar--34">${initials(v.name)}</span><span class="ellipsis">${esc(v.name)}</span></span>
-        <span class="cell-mono">#${v.id}</span>
-        <span class="cell-soft">${v.method}</span>
-        <span><span class="chip chip--${v.k}">${STATUS[v.k]}</span></span>
-      </div>`).join('');
+        <span class="cell-person"><span class="avatar avatar--34">${esc(initials(v.name))}</span><span class="ellipsis">${esc(v.name)}</span></span>
+        <span class="cell-mono">#${esc(v.number)}</span>
+        <span class="cell-soft">${METHOD_ENTRY[v.method]}</span>
+        <span><span class="chip chip--${k}">${STATUS[k]}</span></span>
+      </div>`;
+    }).join('') : '<div class="empty">Aún no hay entradas hoy</div>';
   }
 
   /* ---------- Punto de venta ---------- */
@@ -536,27 +658,14 @@
     $('#planCounts').innerHTML = plans.map((p, i) => `
       <div class="count"><span class="count__n"${top > 0 && counts[i] === top ? ' style="color:var(--lime)"' : ''}>${counts[i]}</span><span class="count__label">${esc(p.name)}</span></div>`).join('');
     $('#payCount').textContent = summary ? summary.memberships.count : 0;
-    const inc = { mem: summary ? summary.memberships.totalCents : 0, refri: summary ? summary.fridge.totalCents : 0 };
-    inc.total = inc.mem + inc.refri;
-    Object.keys(inc).forEach(k => $$(`[data-inc="${k}"]`, root).forEach(el => { el.textContent = money(pesos(inc[k])); }));
+    const mem = summary ? pesos(summary.memberships.totalCents) : 0, refri = summary ? pesos(summary.fridge.totalCents) : 0;
+    renderIncome({ mem, refri, total: mem + refri }, root);
   }
 
   async function findCajaMember() {
-    const input = $('#payMember');
-    const q = input.value.trim();
-    if (!q || cajaMember) return;
-    try {
-      const data = await API.members.list({ q });
-      const digits = q.replace(/\D/g, '');
-      const exact = digits && digits.length === q.replace(/[#\s]/g, '').length
-        ? data.items.find(m => m.number === digits.padStart(4, '0')) : null;
-      if (exact || data.items.length === 1) { selectMember(exact || data.items[0]); return; }
-      input.setCustomValidity(data.total === 0 ? 'No se encontró ningún socio.'
-        : `${data.total} socios coinciden: escribe más o usa el número de socio.`);
-      input.reportValidity();
-    } catch (err) {
-      if (err.status !== 401) alert(err.message);
-    }
+    if (cajaMember) return;
+    const member = await pickMember($('#payMember'));
+    if (member) selectMember(member);
   }
   $('#payMember').addEventListener('input', e => {
     e.target.setCustomValidity('');
@@ -663,11 +772,9 @@
   tick();
   setInterval(tick, 1000);
   renderFingerprint();
-  renderIncome();
-  renderHome();
+  // Refri y Cierre siguen con data.js hasta su fase; Inicio, Acceso, Visitas y Caja cargan de la API al abrirse
+  [$('[data-screen="pos"]'), $('[data-screen="cierre"]')].forEach(root => renderIncome(totals(), root));
   initCarousel();
-  renderAccess();
-  renderVisits();
   renderPos();
   renderAdmin();
   renderDenoms();
