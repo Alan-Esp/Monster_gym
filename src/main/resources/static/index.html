@@ -26,8 +26,8 @@
           <span class="eyebrow eyebrow--date" data-date></span>
           <h1 class="h1">Inicia sesión.</h1>
         </div>
-        <label class="field"><span class="eyebrow">USUARIO</span><input class="input" placeholder="Tu usuario"></label>
-        <label class="field"><span class="eyebrow">CONTRASEÑA</span><input class="input" type="password" placeholder="••••••••"></label>
+        <label class="field"><span class="eyebrow">USUARIO</span><input class="input" id="loginUser" placeholder="Tu usuario"></label>
+        <label class="field"><span class="eyebrow">CONTRASEÑA</span><input class="input" id="loginPin" type="password" placeholder="••••••••"></label>
         <button class="btn btn--primary btn--lg btn--block" type="submit">Entrar</button>
         <div class="or"><span>o</span></div>
         <button class="btn btn--secondary btn--block" type="button" data-login>Entrar con huella</button>
@@ -44,14 +44,14 @@
       <span class="brand__name">MONSTER<span>GYM</span></span>
     </div>
     <div class="topbar__right">
-      <div class="avatar avatar--lime">SR</div>
+      <div class="avatar avatar--lime" data-user-initials>SR</div>
       <button class="btn-sm" data-logout>Salir</button>
     </div>
   </header>
   <div class="opening">
     <div class="page-head__titles">
       <span class="eyebrow eyebrow--date">APERTURA DE TURNO · <span data-date></span></span>
-      <h1 class="h1 h1--hero">Abre tu turno,<br><span class="lime">Sergio.</span></h1>
+      <h1 class="h1 h1--hero">Abre tu turno,<br><span class="lime" data-user-first>Sergio.</span></h1>
     </div>
     <div class="card card--pad col" style="gap:18px">
       <div class="field">
@@ -63,7 +63,7 @@
         </div>
       </div>
       <div class="summary">
-        <div class="summary__row"><span class="muted">Responsable</span><span>Sergio Ramírez</span></div>
+        <div class="summary__row"><span class="muted">Responsable</span><span data-user-name>Sergio Ramírez</span></div>
         <div class="summary__row"><span class="muted">Caja</span><span>Caja 01</span></div>
         <div class="summary__row" style="border-bottom:0"><span class="muted">Hora de apertura</span><span class="mono" data-now></span></div>
       </div>
@@ -108,7 +108,7 @@
     <div class="topbar__right">
       <button class="shift-chip" data-go="cierre"><span class="status__dot"></span>Turno abierto · <span class="mono" id="shiftOpenedAt">--:--</span></button>
       <div class="status" id="fpStatus"><span class="status__dot"></span><span id="fpLabel">Sin huella</span></div>
-      <div class="avatar avatar--lime" id="userInitials">SR</div>
+      <div class="avatar avatar--lime" id="userInitials" data-user-initials data-logout role="button" tabindex="0">SR</div>
     </div>
   </header>
 
@@ -493,6 +493,7 @@
 </div>
 
 <script src="js/data.js"></script>
+<script src="js/api.js"></script>
 <script src="js/app.js"></script>
 </body>
 </html>

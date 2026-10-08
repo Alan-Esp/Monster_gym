@@ -26,18 +26,88 @@
     window.scrollTo(0, 0);
   }
   const hhmm = d => d.toTimeString().slice(0, 5);
-  $('#loginForm').addEventListener('submit', e => { e.preventDefault(); showGate('apertura'); });
-  $('[data-login]').addEventListener('click', () => showGate('apertura'));
-  $('[data-logout]').addEventListener('click', () => showGate('login'));
-  $('#openingCash').addEventListener('input', e => { e.target.value = e.target.value.replace(/[^0-9]/g, ''); });
-  $('#openShift').addEventListener('click', () => {
-    D.shift.openingCash = parseInt($('#openingCash').value, 10) || 0;
-    D.shift.openedAt = new Date();
-    $('#shiftOpenedAt').textContent = hhmm(D.shift.openedAt);
+  const ROLE_LABEL = { administrador: 'Administrador', recepcion: 'Recepción', entrenador: 'Entrenador' };
+  const canOpenShift = me => me.role === 'administrador' || me.role === 'recepcion';
+
+  /* Barra de usuario: nombre, iniciales, rol y turno (datos de /api/me) */
+  function renderUser(me) {
+    const first = me.name.split(' ')[0];
+    const shiftAt = me.shift ? me.shift.openedAt.slice(11, 16) : null;
+    const label = [me.name, ROLE_LABEL[me.role] || me.role, shiftAt ? 'Turno desde ' + shiftAt : 'Sin turno'].join(' · ');
+    $$('[data-user-initials]').forEach(el => { el.textContent = me.initials; });
+    $$('[data-user-name]').forEach(el => { el.textContent = me.name; });
+    $$('[data-user-first]').forEach(el => { el.textContent = first + '.'; });
+    const avatar = $('#userInitials');
+    avatar.title = label + ' — clic para salir';
+    avatar.setAttribute('aria-label', label + '. Cerrar sesión');
+    $('.shift-chip').style.display = me.shift ? '' : 'none';
+    $('#shiftOpenedAt').textContent = shiftAt || '--:--';
+    // La pantalla de cierre todavía usa data.js; se le pasa la hora real de apertura
+    D.shift.openedAt = me.shift ? new Date(me.shift.openedAt) : null;
+  }
+
+  function enterApp(me) {
+    renderUser(me);
+    if (!me.shift && canOpenShift(me)) { showGate('apertura'); return; }
     showGate(null);
     go('inicio');
+  }
+
+  function showLoginError(message) {
+    const pin = $('#loginPin');
+    pin.setCustomValidity(message);
+    pin.reportValidity();
+  }
+  $('#loginUser').addEventListener('input', () => $('#loginPin').setCustomValidity(''));
+  $('#loginPin').addEventListener('input', e => e.target.setCustomValidity(''));
+
+  $('#loginForm').addEventListener('submit', async e => {
+    e.preventDefault();
+    const user = $('#loginUser').value.trim(), pin = $('#loginPin').value;
+    if (!user || !pin) { showLoginError('Escribe tu usuario y tu PIN o contraseña.'); return; }
+    const btn = $('#loginForm [type="submit"]');
+    btn.disabled = true;
+    try {
+      const me = await API.login(user, pin);
+      $('#loginPin').value = '';
+      enterApp(me);
+    } catch (err) {
+      showLoginError(err.message);
+    } finally {
+      btn.disabled = false;
+    }
   });
-  $('#closeShift').addEventListener('click', () => { D.shift.openedAt = null; showGate('login'); });
+  $('[data-login]').addEventListener('click', () =>
+    showLoginError('El acceso con huella estará disponible cuando se conecte el lector.'));
+
+  async function logout() {
+    try { await API.logout(); } catch (err) { /* la sesión ya no existe */ }
+    $('#loginForm').reset();
+    showGate('login');
+  }
+  $$('[data-logout]').forEach(el => el.addEventListener('click', () => {
+    if (el.id === 'userInitials' && !confirm('¿Cerrar sesión?')) return;
+    logout();
+  }));
+  $('#userInitials').addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') e.target.click(); });
+  API.onUnauthorized(() => showGate('login'));
+
+  $('#openingCash').addEventListener('input', e => { e.target.value = e.target.value.replace(/[^0-9]/g, ''); });
+  $('#openShift').addEventListener('click', async e => {
+    const pesos = parseInt($('#openingCash').value, 10) || 0;
+    e.target.disabled = true;
+    try {
+      await API.shifts.open(pesos * 100);
+      D.shift.openingCash = pesos;
+      enterApp(await API.me());
+    } catch (err) {
+      if (err.status !== 401) alert(err.message);
+    } finally {
+      e.target.disabled = false;
+    }
+  });
+  // El cierre real se conecta en otra fase; por ahora termina la sesión para no dejarla abierta
+  $('#closeShift').addEventListener('click', () => { D.shift.openedAt = null; logout(); });
 
   /* ---------- Cierre de turno ---------- */
   const BILLS = [1000, 500, 200, 100, 50, 20], COINS = [10, 5, 2, 1];
@@ -393,7 +463,6 @@
   }
 
   /* ---------- Inicio de la app ---------- */
-  $('#userInitials').textContent = D.user.initials;
   tick();
   setInterval(tick, 1000);
   renderFingerprint();
@@ -408,4 +477,7 @@
   renderAdmin();
   renderDenoms();
   bindSelections();
+
+  // Si ya hay sesión entra directo; si no, el 401 deja visible el login
+  API.me().then(enterApp).catch(() => {});
 })();
