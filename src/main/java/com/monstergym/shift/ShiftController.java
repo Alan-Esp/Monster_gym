@@ -1,6 +1,9 @@
 package com.monstergym.shift;
 
+import com.fasterxml.jackson.annotation.JsonUnwrapped;
 import com.monstergym.auth.EmployeePrincipal;
+import com.monstergym.printing.PrintInfo;
+import com.monstergym.printing.PrintService;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
@@ -10,6 +13,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -42,10 +46,16 @@ public class ShiftController {
             String notes) {
     }
 
-    private final ShiftService service;
+    /** Respuesta del cierre: el corte más "print" con el trabajo del ticket automático. */
+    public record ClosedShift(@JsonUnwrapped ShiftSummary summary, PrintInfo print) {
+    }
 
-    public ShiftController(ShiftService service) {
+    private final ShiftService service;
+    private final PrintService printing;
+
+    public ShiftController(ShiftService service, PrintService printing) {
         this.service = service;
+        this.printing = printing;
     }
 
     @PostMapping("/open")
@@ -64,14 +74,24 @@ public class ShiftController {
 
     @PostMapping("/close")
     @PreAuthorize("hasAnyRole('ADMINISTRADOR', 'RECEPCION')")
-    public ShiftSummary close(@AuthenticationPrincipal EmployeePrincipal employee,
-                              @Valid @RequestBody CloseRequest body) {
-        return service.close(employee, body.countedCashCents(), body.notes());
+    public ClosedShift close(@AuthenticationPrincipal EmployeePrincipal employee,
+                             @Valid @RequestBody CloseRequest body) {
+        ShiftSummary summary = service.close(employee, body.countedCashCents(), body.notes());
+        // El cierre ya está guardado: el ticket se encola aparte y su falla nunca lo revierte
+        return new ClosedShift(summary, printing.autoShiftClose(summary.id(), employee));
     }
 
     @GetMapping
     @PreAuthorize("hasRole('ADMINISTRADOR')")
     public List<ShiftSummary> history(@RequestParam(defaultValue = "50") int limit) {
         return service.history(Math.clamp(limit, 1, 200));
+    }
+
+    /** Reimpresión del ticket de cierre, marcada COPIA (solo Administrador, desde el historial). */
+    @PostMapping("/{id}/ticket")
+    @ResponseStatus(HttpStatus.ACCEPTED)
+    @PreAuthorize("hasRole('ADMINISTRADOR')")
+    public PrintInfo reprint(@AuthenticationPrincipal EmployeePrincipal employee, @PathVariable long id) {
+        return printing.reprintShift(id, employee);
     }
 }

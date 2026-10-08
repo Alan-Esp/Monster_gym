@@ -5,6 +5,9 @@ import com.monstergym.member.MemberDtos.CreatedMember;
 import com.monstergym.member.MemberDtos.MemberDetail;
 import com.monstergym.member.MemberDtos.MemberPage;
 import com.monstergym.payment.PaymentController;
+import com.monstergym.payment.PaymentReceipt;
+import com.monstergym.payment.PaymentWithPrint;
+import com.monstergym.printing.PrintService;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
@@ -54,10 +57,16 @@ public class MemberController {
             String notes) {
     }
 
-    private final MemberService service;
+    /** Alta de socio: payment es null si no se cobró un plan. */
+    public record CreatedResponse(MemberDetail member, PaymentWithPrint payment) {
+    }
 
-    public MemberController(MemberService service) {
+    private final MemberService service;
+    private final PrintService printing;
+
+    public MemberController(MemberService service, PrintService printing) {
         this.service = service;
+        this.printing = printing;
     }
 
     @GetMapping
@@ -71,9 +80,14 @@ public class MemberController {
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
     @PreAuthorize("hasAnyRole('ADMINISTRADOR', 'RECEPCION')")
-    public CreatedMember create(@AuthenticationPrincipal EmployeePrincipal employee,
-                                @Valid @RequestBody CreateRequest body) {
-        return service.create(employee, body.fullName(), body.phone(), body.notes(), body.planId(), body.method());
+    public CreatedResponse create(@AuthenticationPrincipal EmployeePrincipal employee,
+                                  @Valid @RequestBody CreateRequest body) {
+        CreatedMember created = service.create(employee, body.fullName(), body.phone(), body.notes(),
+                body.planId(), body.method());
+        PaymentReceipt p = created.payment();
+        // Si hubo cobro, su ticket se encola después de guardar (una falla de impresión no revierte el alta)
+        return new CreatedResponse(created.member(),
+                p == null ? null : new PaymentWithPrint(p, printing.autoPayment(p.id(), employee)));
     }
 
     @GetMapping("/{id}")

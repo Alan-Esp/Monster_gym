@@ -20,3 +20,5 @@ Thumbs.db
 *.iws
 *.ipr
 .vscode/
+
+tickets-dev/

@@ -128,6 +128,59 @@
       e.target.disabled = false;
     }
   });
+  /* ---------- Tickets ---------- */
+  // El servidor imprime en segundo plano: el cobro o el cierre ya quedó guardado aunque el ticket falle.
+  // print = { jobId, status } de la respuesta; el resultado se consulta con GET /api/print-jobs/{id}.
+  const PRINT_DONE = ['entregado', 'en_cola_windows', 'fallido'];
+  const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+  // Consulta el trabajo hasta que termine (o falle un intento, si untilError) o pasen maxMs. Devuelve el último estado.
+  async function waitPrint(print, maxMs, untilError) {
+    if (!print || !print.jobId) return print;
+    let job = print;
+    for (const until = Date.now() + maxMs; Date.now() < until;) {
+      await sleep(1500);
+      try { job = await API.printer.job(print.jobId); } catch (err) { return job; }
+      if (PRINT_DONE.includes(job.status) || (untilError && job.error)) return job;
+    }
+    return job;
+  }
+
+  // Renglón para el aviso del cobro o del cierre, según cómo quedó el ticket
+  function printNote(job, what) {
+    if (!job) return '';
+    if (job.status === 'desactivada') return `\n\nTicket ${what}: la impresión está desactivada.`;
+    if (job.status === 'entregado') return `\n\nTicket ${what}: enviado a la impresora.`;
+    if (job.status === 'en_cola_windows') return `\n\nTicket ${what}: en la cola de Windows (si no sale, revisa que la impresora esté encendida).`;
+    if (job.status === 'fallido') return `\n\nNo se imprimió el ticket ${what}: ${job.error}`;
+    if (job.error) return `\n\nEl ticket ${what} aún no sale: ${job.error}`;
+    return `\n\nTicket ${what}: en cola de impresión.`;
+  }
+
+  // Sin bloquear la pantalla: avisa solo si el ticket terminó en fallido
+  async function watchPrint(print, what, where) {
+    if (!print || !print.jobId) return;
+    const job = await waitPrint(print, 180000, false);
+    if (job && job.status === 'fallido') alert(`No se imprimió el ticket ${what}.\n${job.error}\n\nPuedes reimprimirlo desde ${where}.`);
+  }
+
+  // Reimpresión desde un botón: lo deshabilita mientras espera y avisa si falla
+  async function reprint(btn, call, what) {
+    const label = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = 'Imprimiendo…';
+    try {
+      const job = await waitPrint(await call(), 90000, false);
+      if (job && job.status === 'fallido') alert(`No se imprimió la copia ${what}.\n${job.error}`);
+      else if (job && !PRINT_DONE.includes(job.status)) alert(`La copia ${what} sigue esperando a la impresora.`);
+    } catch (err) {
+      if (err.status !== 401) alert(err.message);
+    } finally {
+      btn.disabled = false;
+      btn.textContent = label;
+    }
+  }
+
   /* ---------- Cierre de turno ---------- */
   const BILLS = [1000, 500, 200, 100, 50, 20], COINS = [10, 5, 2, 1];
   let cashCount = {};        // denominación (pesos) → piezas contadas
@@ -212,18 +265,26 @@
     const counted = countedPesos(), expected = pesos(closeSummary.expectedCashCents);
     if (!confirm(`¿Cerrar el turno?\nEsperado en caja: ${money(expected)}\nContado: ${money(counted)}\n`
       + `Diferencia: ${signedMoney(counted - expected)}\n\nUn turno cerrado ya no se modifica.`)) return;
-    e.target.disabled = true;
+    const btn = e.target, label = btn.textContent;
+    btn.disabled = true;
     try {
       const r = await API.shifts.close(Math.round(counted * 100), $('#closeNotes').value.trim() || null);
+      // El turno ya quedó cerrado; antes de salir se espera un poco al ticket para avisar si no salió
+      btn.textContent = 'Imprimiendo ticket…';
+      const job = await waitPrint(r.print, 25000, true);
+      const failed = job && (job.status === 'fallido' || (job.error && !PRINT_DONE.includes(job.status)));
       alert(`Turno cerrado.\nEsperado: ${money(pesos(r.expectedCashCents))}\nContado: ${money(pesos(r.countedCashCents))}\n`
-        + `Diferencia: ${signedMoney(pesos(r.differenceCents))}`);
+        + `Diferencia: ${signedMoney(pesos(r.differenceCents))}` + printNote(job, 'de cierre')
+        + (failed ? '\nUn administrador puede reimprimirlo en Admin > Turnos.' : ''));
       cashCount = {};
       $('#closeNotes').value = '';
       renderDenoms();
       logout();
     } catch (err) {
       if (err.status !== 401) alert(err.message);
-      e.target.disabled = false;
+      btn.disabled = false;
+    } finally {
+      btn.textContent = label;
     }
   });
   document.addEventListener('click', e => {
@@ -812,6 +873,7 @@
         <span class="pay-row__plan">${esc(p.plan.name)}</span>
         <span class="pay-row__method">${p.voidedAt ? 'Cancelado' : METHOD_LABEL[p.method]}</span>
         <span class="pay-row__amount">${money(pesos(p.amountCents))}</span>
+        <button class="btn-sm" data-reprint-payment="${p.id}" data-folio="${esc(p.folio)}" title="Reimprimir ticket (COPIA)">Ticket</button>
       </div>`).join('');
 
     const byPlan = summary ? summary.memberships.byPlan : [];
@@ -844,7 +906,8 @@
       const r = await API.payments.create({ memberId: cajaMember.id, planId: cajaPlanId, method });
       alert(`Cobro registrado · Folio ${r.folio}\n${r.member.fullName} · ${r.plan.name}\n`
         + `Vigencia: ${fmtDay(r.startsOn)} al ${fmtDay(r.endsOn)}\n`
-        + `Total: ${money(pesos(r.amountCents))} · ${METHOD_LABEL[r.method]}`);
+        + `Total: ${money(pesos(r.amountCents))} · ${METHOD_LABEL[r.method]}` + printNote(r.print, 'del cobro'));
+      watchPrint(r.print, `del folio ${r.folio}`, 'Pagos del turno (botón Ticket)');  // no se espera
       cajaMember = null;
       $('#payMember').value = '';
       // El método vuelve a Efectivo para no repetir por error el del cobro anterior
@@ -854,6 +917,11 @@
       if (err.status !== 401) alert(err.message);
       updatePayBtn();
     }
+  });
+
+  $('#paymentsList').addEventListener('click', e => {
+    const btn = e.target.closest('[data-reprint-payment]');
+    if (btn) reprint(btn, () => API.payments.reprint(Number(btn.dataset.reprintPayment)), `del folio ${btn.dataset.folio}`);
   });
 
   /* ---------- Admin ---------- */
@@ -868,24 +936,96 @@
   async function loadAdmin() {
     if (!currentUser || currentUser.role !== 'administrador') { go('inicio'); return; }
     try {
-      const [emps, planList, summary, months, cfg] = await Promise.all([API.employees.list(), API.plans.list(),
-        API.reports.summary(), API.reports.incomeMonthly(6), API.settings.get()]);
+      const [emps, planList, summary, months, cfg, shiftList] = await Promise.all([API.employees.list(),
+        API.plans.list(), API.reports.summary(), API.reports.incomeMonthly(6), API.settings.get(), API.shifts.history()]);
       employees = emps;
       plans = planList;
       settings = cfg;
       editingEmployee = editingPlan = null;
-      renderAdmin({ employees, plans, summary, months, settings });
+      renderAdmin({ employees, plans, summary, months, settings, shifts: shiftList });
     } catch (err) {
       if (err.status !== 401) alert(err.message);
     }
+    loadPrinterStatus();
   }
 
   function renderAdmin(d) {
     renderEmployees(d.employees);
     renderPrices(d.plans);
     renderReports(d.summary, d.months);
+    renderShifts(d.shifts);
     renderSettings(d.settings);
   }
+
+  /* ----- Turnos: historial de cortes con reimpresión del ticket de cierre ----- */
+  function renderShifts(list) {
+    $('#shiftsList').innerHTML = !list.length ? '<div class="empty">Aún no hay turnos</div>' : list.map(s => {
+      const diff = s.differenceCents;
+      const tone = diff === null ? 'muted' : diff < 0 ? 't-v' : diff > 0 ? 't-p' : 't-a';
+      return `
+      <div class="list-row" style="padding:10px 0">
+        <span class="mono" style="font-size:12px;color:var(--muted);flex-shrink:0">${fmtDay(s.openedAt.slice(0, 10))} · ${s.openedAt.slice(11, 16)}–${s.closedAt ? s.closedAt.slice(11, 16) : '…'}</span>
+        <span class="ellipsis" style="flex:1">${esc(s.employeeName)}</span>
+        <span class="mono">${money(pesos(s.totalCents))}</span>
+        <span class="mono ${tone}" style="width:84px;text-align:right" title="Diferencia de efectivo">${diff === null ? '—' : signedMoney(pesos(diff))}</span>
+        ${s.closedAt
+          ? `<button class="btn-sm" data-reprint-shift="${s.id}" title="Reimprimir ticket de cierre (COPIA)">Reimprimir</button>`
+          : '<span class="chip chip--a">Abierto</span>'}
+      </div>`;
+    }).join('');
+  }
+  $('#shiftsList').addEventListener('click', e => {
+    const btn = e.target.closest('[data-reprint-shift]');
+    if (btn) reprint(btn, () => API.shifts.reprint(Number(btn.dataset.reprintShift)), 'del cierre');
+  });
+
+  /* ----- Impresora: estado (sin abrir la conexión Bluetooth) y ticket de prueba ----- */
+  async function loadPrinterStatus() {
+    const desc = $('#printerStatusDesc');
+    try {
+      const st = await API.printer.status();
+      const state = st.ready === true ? 'Lista' : st.ready === false ? 'Con problema' : 'Sin confirmar';
+      let text = `${state}. ${st.detail}`;
+      if (st.pending) text += ` ${st.pending} ticket(s) en cola.`;
+      if (st.failedToday) text += ` ${st.failedToday} ticket(s) fallido(s) hoy.`;
+      if (st.mode === 'fake') text = 'Modo desarrollo. ' + text;
+      desc.textContent = text;
+      desc.classList.toggle('t-v', st.ready === false);
+      desc.classList.toggle('t-a', st.ready === true);
+      $('#cfgPortDesc').textContent = st.availablePorts.length
+        ? 'Puertos en esta PC: ' + st.availablePorts.join(', ') : 'Puerto serie saliente del Bluetooth';
+      $('#cfgPrinterNameDesc').textContent = st.availablePrinters.length
+        ? 'Instaladas: ' + st.availablePrinters.join(', ') : 'Nombre exacto en Windows';
+    } catch (err) {
+      if (err.status !== 401) desc.textContent = 'No se pudo consultar: ' + err.message;
+    }
+  }
+  $('#printerRefresh').addEventListener('click', loadPrinterStatus);
+  $('#printerTest').addEventListener('click', async e => {
+    const btn = e.target, label = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = 'Imprimiendo…';
+    try {
+      const job = await waitPrint(await API.printer.test(), 90000, false);
+      if (job.status === 'entregado') {
+        alert('La impresora recibió la prueba.\nRevisa en el papel la línea de acentos (áéíóúñÑü¿¡$). '
+          + 'Si salen signos raros, cambia la página de códigos y el juego de caracteres.');
+      } else if (job.status === 'en_cola_windows') {
+        alert('Windows aceptó la prueba. Si no sale el papel, la impresora está apagada o desconectada '
+          + '(la cola de Windows no lo detecta).');
+      } else if (job.status === 'fallido') {
+        alert('No se imprimió la prueba.\n' + job.error);
+      } else {
+        alert('La prueba sigue esperando a la impresora.' + (job.error ? '\n' + job.error : ''));
+      }
+    } catch (err) {
+      if (err.status !== 401) alert(err.message);
+    } finally {
+      btn.disabled = false;
+      btn.textContent = label;
+      loadPrinterStatus();
+    }
+  });
 
   /* ----- Empleados: la fila en edición se dibuja como formulario dentro de la misma tabla ----- */
   function employeeForm(e) {
@@ -1036,11 +1176,23 @@
   }
 
   /* ----- Configuración: se guarda al salir del campo (o Enter) y al tocar un interruptor ----- */
+  // Los campos de impresión vienen agrupados en settings.printing; aquí se ven con el nombre que usa el PUT
+  const flatSettings = s => ({ ...s, printEnabled: s.printing.enabled, printerTransport: s.printing.transport,
+    printerPort: s.printing.port, printerName: s.printing.printerName, printerCodepage: s.printing.codepage,
+    printerCharset: s.printing.charset, ticketFooter: s.printing.ticketFooter });
+
   function renderSettings(s) {
-    $('#cfgName').value = s.gymName;
-    $('#cfgCapacity').value = s.capacity;
-    $('#cfgWarn').value = s.warnDays;
-    $$('[data-toggle]').forEach(t => t.classList.toggle('is-on', !!s[t.dataset.toggle]));
+    const f = flatSettings(s);
+    $('#cfgName').value = f.gymName;
+    $('#cfgCapacity').value = f.capacity;
+    $('#cfgWarn').value = f.warnDays;
+    $('#cfgPrinterTransport').value = f.printerTransport;
+    $('#cfgPrinterPort').value = f.printerPort;
+    $('#cfgPrinterName').value = f.printerName;
+    $('#cfgCodepage').value = f.printerCodepage;
+    $('#cfgCharset').value = f.printerCharset;
+    $('#cfgFooter').value = f.ticketFooter;
+    $$('[data-toggle]').forEach(t => t.classList.toggle('is-on', !!f[t.dataset.toggle]));
   }
 
   async function saveSetting(input, key, value) {
@@ -1048,6 +1200,7 @@
       settings = await API.settings.update({ [key]: value });
       input.setCustomValidity('');
       renderSettings(settings);
+      if (/^print|^ticket/.test(key)) loadPrinterStatus();
     } catch (err) {
       if (err.status === 401) return;
       const message = (err.fields && err.fields[key]) || err.message;
@@ -1056,19 +1209,23 @@
       input.reportValidity();
     }
   }
-  [['#cfgName', 'gymName', v => v.trim()], ['#cfgCapacity', 'capacity', Number], ['#cfgWarn', 'warnDays', Number]]
+  const text = v => v.trim();
+  [['#cfgName', 'gymName', text], ['#cfgCapacity', 'capacity', Number], ['#cfgWarn', 'warnDays', Number],
+    ['#cfgPrinterTransport', 'printerTransport', text], ['#cfgPrinterPort', 'printerPort', v => v.trim().toUpperCase()],
+    ['#cfgPrinterName', 'printerName', text], ['#cfgCodepage', 'printerCodepage', Number],
+    ['#cfgCharset', 'printerCharset', text], ['#cfgFooter', 'ticketFooter', text]]
     .forEach(([sel, key, parse]) => {
       const input = $(sel);
       input.addEventListener('input', () => input.setCustomValidity(''));
       input.addEventListener('keydown', e => { if (e.key === 'Enter') input.blur(); });
       input.addEventListener('change', () => {
         const raw = input.value.trim();
-        if (key !== 'gymName' && !/^\d+$/.test(raw)) {
+        if (parse === Number && !/^\d+$/.test(raw)) {
           input.setCustomValidity('Escribe un número entero.');
           input.reportValidity();
           return;
         }
-        if (settings && String(settings[key]) === raw) return;
+        if (settings && String(flatSettings(settings)[key]) === raw) return;
         saveSetting(input, key, parse(raw));
       });
     });

@@ -7,7 +7,7 @@
 - Roles: A = Administrador, R = Recepción, E = Entrenador.
 - Errores: HTTP adecuado y cuerpo
   { "error": { "code": "SIN_TURNO", "message": "Abre un turno antes de cobrar." } }
-  Códigos usados: NO_AUTENTICADO (401), SIN_PERMISO (403), CSRF_INVALIDO (403, falta o no coincide X-XSRF-TOKEN), NO_ENCONTRADO (404), VALIDACION (422, con "fields"), SIN_TURNO (409), TURNO_ABIERTO (409), STOCK_INSUFICIENTE (409), SOCIO_VENCIDO (409, requiere confirmación), DOBLE_REGISTRO (409, requiere confirmación), CUENTA_BLOQUEADA (423, tras 5 intentos fallidos; 15 minutos), PAGO_CANCELADO (409), TURNO_CERRADO (409, no se cancela un pago de un turno cerrado), NUMERO_AGOTADO (409, se pasó del socio 9999), ACCESO_MANUAL_DESACTIVADO (409, setting.manual_access = 0), VENTA_CANCELADA (409), OPERACION_NO_PERMITIDA (409, p. ej. desactivarse a sí mismo).
+  Códigos usados: NO_AUTENTICADO (401), SIN_PERMISO (403), CSRF_INVALIDO (403, falta o no coincide X-XSRF-TOKEN), NO_ENCONTRADO (404), VALIDACION (422, con "fields"), SIN_TURNO (409), TURNO_ABIERTO (409), STOCK_INSUFICIENTE (409), SOCIO_VENCIDO (409, requiere confirmación), DOBLE_REGISTRO (409, requiere confirmación), CUENTA_BLOQUEADA (423, tras 5 intentos fallidos; 15 minutos), PAGO_CANCELADO (409), TURNO_CERRADO (409, no se cancela un pago de un turno cerrado), NUMERO_AGOTADO (409, se pasó del socio 9999), ACCESO_MANUAL_DESACTIVADO (409, setting.manual_access = 0), VENTA_CANCELADA (409), OPERACION_NO_PERMITIDA (409, p. ej. desactivarse a sí mismo), IMPRESION_DESACTIVADA (409).
 - Acciones que requieren confirmación (SOCIO_VENCIDO, DOBLE_REGISTRO) se repiten con "confirm": true.
 
 ## Autenticación y turnos
@@ -19,7 +19,7 @@
 | POST /api/shifts/open | A, R | { openingCashCents } |
 | GET /api/shifts/current | A, R | Turno abierto y resumen del corte parcial |
 | POST /api/shifts/close | A, R | { countedCashCents } devuelve el corte final |
-| GET /api/shifts | A | Historial de cortes |
+| GET /api/shifts?limit=50 | A | Historial de cortes (Admin > Turnos) |
 
 ## Inicio
 | GET /api/dashboard | todos | |
@@ -109,14 +109,31 @@ GET /api/visits (date por defecto hoy) responde
 ## Impresión de tickets (Fase 5B)
 | Método y ruta | Roles | Descripción |
 |---|---|---|
-| POST /api/payments/{id}/ticket | A, R | Reimprime el ticket de cobro (marcado COPIA) |
-| POST /api/shifts/{id}/ticket | A | Reimprime el ticket de cierre (marcado COPIA) |
-| GET /api/printer/status | A, R | { enabled, printerName, ready } |
-| POST /api/printer/test | A | Imprime un ticket de prueba |
+| POST /api/payments/{id}/ticket | A, R | Reimprime el ticket de cobro (marcado COPIA). 202 con print |
+| POST /api/shifts/{id}/ticket | A | Reimprime el ticket de cierre (marcado COPIA). 202; 409 TURNO_ABIERTO si sigue abierto |
+| GET /api/print-jobs/{id} | A, R | Estado de un trabajo de impresión |
+| GET /api/printer/status | A, R | Estado de la impresora (no abre la conexión Bluetooth) |
+| POST /api/printer/test | A | Encola un ticket de prueba (acentos, regla de columnas y configuración). 202 con print |
 
-POST /api/payments y POST /api/shifts/close imprimen automáticamente y agregan a su respuesta
-{ "printed": true } o { "printed": false, "printError": "Sin papel o impresora apagada" }.
-El cobro y el cierre se guardan aunque la impresión falle.
+La impresión es asíncrona: un solo worker procesa print_job en orden, con timeout y reintentos.
+POST /api/payments, POST /api/members (si cobra) y POST /api/shifts/close no esperan a la impresora:
+devuelven sus campos de siempre más
+"print": { "jobId": 12, "status": "pendiente", "error": null }
+o { "jobId": null, "status": "desactivada" } (setting.print_enabled = 0)
+o { "jobId": null, "status": "fallido", "error": "..." } (ni siquiera se pudo encolar).
+El cobro y el cierre se guardan aunque la impresión falle. La pantalla consulta el resultado con GET /api/print-jobs/{id}.
+
+- Trabajo: { id, kind (cobro|cierre_turno|prueba), refId, isCopy, status, transport (serial|windows|archivo),
+  attempts, error, employeeId, createdAt, finishedAt }.
+- status: pendiente → enviando → entregado | en_cola_windows | fallido. Mientras se reintenta queda "enviando"
+  con el error del último intento. Ningún estado significa "salió en papel": eso no se puede confirmar.
+- Reimpresión o prueba con la impresión desactivada: 409 IMPRESION_DESACTIVADA.
+- Estado: { enabled, mode (real|fake), transport, printerName, port, codepage, charset, ready (true, false o
+  null = no se puede saber), detail, pending, failedToday, lastJob, availablePorts, availablePrinters }.
+- GET /api/settings incluye "printing": { enabled, transport, printerName, port, codepage, charset, ticketFooter,
+  timeoutSeconds, retries, statusCheck }. PUT /api/settings acepta printEnabled, printerTransport (serial|windows),
+  printerName, printerPort (COMn), printerCodepage (0-255), printerCharset (debe existir en Java), ticketFooter
+  (máx. 200), printTimeoutSeconds (5-120), printRetries (0-10), printerStatusCheck.
 
 ## Huella (Fase 6)
 | POST /api/fingerprint/enroll/{memberId} | A, R | Inicia el enrolamiento (captura en el backend) |

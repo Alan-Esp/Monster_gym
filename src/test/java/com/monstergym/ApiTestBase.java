@@ -46,6 +46,10 @@ public abstract class ApiTestBase {
     @DynamicPropertySource
     static void dbPath(DynamicPropertyRegistry registry) {
         registry.add("app.db.path", DB::toString);
+        // Nunca se toca la impresora real en pruebas
+        registry.add("app.printer.mode", () -> "fake");
+        registry.add("app.printer.fake-dir", () -> "target/tickets-test");
+        registry.add("app.printer.retry-delays-ms", () -> "20");
     }
 
     @BeforeEach
@@ -62,7 +66,8 @@ public abstract class ApiTestBase {
         insertEmployee(3, "Ernesto Entrenador", "entrenador", "entrenador", true);
         insertEmployee(4, "Inés Inactiva", "inactiva", "recepcion", false);
         // Configuración por defecto de V1 (algunas pruebas la cambian)
-        Map.of("capacity", "120", "warn_days", "3", "manual_access", "1", "inside_minutes", "120")
+        Map.of("capacity", "120", "warn_days", "3", "manual_access", "1", "inside_minutes", "120",
+                        "print_enabled", "1", "print_retries", "3", "print_timeout_seconds", "20")
                 .forEach((k, v) -> jdbc.update("UPDATE setting SET value = ? WHERE key = ?", v, k));
         nextPaymentId = 1000;
     }

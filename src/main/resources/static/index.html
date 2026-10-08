@@ -446,6 +446,7 @@
         <button class="pill pill--tall is-active" data-tab="Empleados">Empleados</button>
         <button class="pill pill--tall" data-tab="Precios">Precios</button>
         <button class="pill pill--tall" data-tab="Reportes">Reportes</button>
+        <button class="pill pill--tall" data-tab="Turnos">Turnos</button>
         <button class="pill pill--tall" data-tab="Configuración">Configuración</button>
       </div>
 
@@ -477,6 +478,13 @@
         </div>
       </div>
 
+      <div class="admin-panel" data-panel="Turnos">
+        <div class="card card--pad-sm col" style="gap:4px">
+          <div class="section-head" style="margin-bottom:8px"><h2 class="h2">Historial de turnos</h2><span class="muted" style="font-size:12px">Reimprime el ticket de cierre (COPIA)</span></div>
+          <div id="shiftsList"></div>
+        </div>
+      </div>
+
       <div class="admin-panel" data-panel="Configuración">
         <div class="card settings">
           <div class="setting"><div class="col" style="gap:2px"><span class="setting__label">Nombre del gimnasio</span><span class="setting__desc">Aparece en tickets y reportes</span></div><input class="input input--w240" id="cfgName"></div>
@@ -485,6 +493,14 @@
           <div class="setting"><div class="col" style="gap:2px"><span class="setting__label">Lector de huella</span><span class="setting__desc" id="cfgFpDesc">Desconectado</span></div><button class="toggle" id="toggleFp" aria-label="Lector de huella"></button></div>
           <div class="setting"><div class="col" style="gap:2px"><span class="setting__label">Permitir acceso manual</span><span class="setting__desc">Recepción puede registrar entradas sin huella</span></div><button class="toggle" data-toggle="manualAccess" aria-label="Acceso manual"></button></div>
           <div class="setting"><div class="col" style="gap:2px"><span class="setting__label">Sonido al registrar acceso</span><span class="setting__desc">Tono distinto para acceso permitido y denegado</span></div><button class="toggle" data-toggle="sound" aria-label="Sonido"></button></div>
+          <div class="setting"><div class="col" style="gap:2px"><span class="setting__label">Imprimir tickets</span><span class="setting__desc">Cobro de membresía y cierre de turno en la impresora de 58 mm</span></div><button class="toggle" data-toggle="printEnabled" aria-label="Imprimir tickets"></button></div>
+          <div class="setting"><div class="col" style="gap:2px;flex:1;min-width:200px"><span class="setting__label">Estado de la impresora</span><span class="setting__desc" id="printerStatusDesc">Consultando…</span></div><div class="row" style="gap:8px"><button class="btn-sm" id="printerRefresh">Actualizar</button><button class="btn-sm" id="printerTest">Imprimir prueba</button></div></div>
+          <div class="setting"><div class="col" style="gap:2px"><span class="setting__label">Conexión de la impresora</span><span class="setting__desc">Puerto COM detecta si está apagada; la cola de Windows no</span></div><select class="input input--w240" id="cfgPrinterTransport"><option value="serial">Puerto COM (Bluetooth)</option><option value="windows">Impresora de Windows</option></select></div>
+          <div class="setting"><div class="col" style="gap:2px"><span class="setting__label">Puerto COM</span><span class="setting__desc" id="cfgPortDesc">Puerto serie saliente del Bluetooth</span></div><input class="input input--w120" id="cfgPrinterPort"></div>
+          <div class="setting"><div class="col" style="gap:2px"><span class="setting__label">Impresora de Windows</span><span class="setting__desc" id="cfgPrinterNameDesc">Nombre exacto en Windows</span></div><input class="input input--w240" id="cfgPrinterName"></div>
+          <div class="setting"><div class="col" style="gap:2px"><span class="setting__label">Página de códigos</span><span class="setting__desc">Número n de ESC t n (PC850 suele ser 2; WPC1252, 16)</span></div><input class="input input--w120" id="cfgCodepage"></div>
+          <div class="setting"><div class="col" style="gap:2px"><span class="setting__label">Juego de caracteres</span><span class="setting__desc">Debe coincidir con la página: IBM850 o windows-1252</span></div><input class="input input--w120" id="cfgCharset"></div>
+          <div class="setting"><div class="col" style="gap:2px"><span class="setting__label">Pie del ticket</span><span class="setting__desc">Última línea de todos los tickets</span></div><input class="input input--w240" id="cfgFooter"></div>
         </div>
       </div>
     </section>

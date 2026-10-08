@@ -65,7 +65,15 @@
     shifts: {
       open: openingCashCents => request('POST', '/api/shifts/open', { openingCashCents }),
       current: () => request('GET', '/api/shifts/current'),
-      close: (countedCashCents, notes) => request('POST', '/api/shifts/close', { countedCashCents, notes })
+      close: (countedCashCents, notes) => request('POST', '/api/shifts/close', { countedCashCents, notes }),
+      history: (limit = 50) => request('GET', '/api/shifts?limit=' + limit),
+      reprint: id => request('POST', '/api/shifts/' + encodeURIComponent(id) + '/ticket')
+    },
+    // Tickets: el cobro y el cierre devuelven print: { jobId, status }; el resultado se consulta con job(id)
+    printer: {
+      status: () => request('GET', '/api/printer/status'),
+      test: () => request('POST', '/api/printer/test'),
+      job: id => request('GET', '/api/print-jobs/' + encodeURIComponent(id))
     },
     products: {
       list: () => request('GET', '/api/products'),
@@ -115,7 +123,8 @@
     payments: {
       create: data => request('POST', '/api/payments', data),
       currentShift: () => request('GET', '/api/payments?shift=current'),
-      void: (id, reason) => request('POST', '/api/payments/' + encodeURIComponent(id) + '/void', { reason })
+      void: (id, reason) => request('POST', '/api/payments/' + encodeURIComponent(id) + '/void', { reason }),
+      reprint: id => request('POST', '/api/payments/' + encodeURIComponent(id) + '/ticket')
     }
   };
 })();

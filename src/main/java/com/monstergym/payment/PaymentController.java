@@ -2,6 +2,8 @@ package com.monstergym.payment;
 
 import com.monstergym.auth.EmployeePrincipal;
 import com.monstergym.common.ApiException;
+import com.monstergym.printing.PrintInfo;
+import com.monstergym.printing.PrintService;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -42,17 +44,21 @@ public class PaymentController {
     }
 
     private final PaymentService service;
+    private final PrintService printing;
 
-    public PaymentController(PaymentService service) {
+    public PaymentController(PaymentService service, PrintService printing) {
         this.service = service;
+        this.printing = printing;
     }
 
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
     @PreAuthorize("hasAnyRole('ADMINISTRADOR', 'RECEPCION')")
-    public PaymentReceipt charge(@AuthenticationPrincipal EmployeePrincipal employee,
-                                 @Valid @RequestBody ChargeRequest body) {
-        return service.charge(employee, body.memberId(), body.planId(), body.method());
+    public PaymentWithPrint charge(@AuthenticationPrincipal EmployeePrincipal employee,
+                                   @Valid @RequestBody ChargeRequest body) {
+        PaymentReceipt receipt = service.charge(employee, body.memberId(), body.planId(), body.method());
+        // El cobro ya está guardado: el ticket se encola aparte y su falla nunca lo revierte
+        return new PaymentWithPrint(receipt, printing.autoPayment(receipt.id(), employee));
     }
 
     @GetMapping
@@ -69,5 +75,13 @@ public class PaymentController {
     @PreAuthorize("hasRole('ADMINISTRADOR')")
     public PaymentReceipt voidPayment(@PathVariable long id, @Valid @RequestBody VoidRequest body) {
         return service.voidPayment(id, body.reason());
+    }
+
+    /** Reimpresión del ticket de cobro, marcada COPIA. */
+    @PostMapping("/{id}/ticket")
+    @ResponseStatus(HttpStatus.ACCEPTED)
+    @PreAuthorize("hasAnyRole('ADMINISTRADOR', 'RECEPCION')")
+    public PrintInfo reprint(@AuthenticationPrincipal EmployeePrincipal employee, @PathVariable long id) {
+        return printing.reprintPayment(id, employee);
     }
 }

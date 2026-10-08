@@ -17,6 +17,7 @@ import java.time.LocalDateTime;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 @Service
 public class ShiftService {
@@ -65,6 +66,12 @@ public class ShiftService {
     @Transactional(readOnly = true)
     public List<ShiftSummary> history(int limit) {
         return shifts.findRecent(limit).stream().map(this::summary).toList();
+    }
+
+    /** Corte de cualquier turno (abierto o cerrado), para el ticket de cierre. */
+    @Transactional(readOnly = true)
+    public Optional<ShiftSummary> summaryOf(long shiftId) {
+        return shifts.findById(shiftId).map(this::summary);
     }
 
     /** Efectivo esperado = fondo inicial + cobros de membresía y ventas del refri en efectivo. */
