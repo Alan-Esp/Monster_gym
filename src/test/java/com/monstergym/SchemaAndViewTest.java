@@ -56,10 +56,7 @@ class SchemaAndViewTest {
     }
 
     private void insertSharedFixtures() {
-        jdbc.execute("""
-                INSERT INTO plan (id, name, days, price_cents)
-                VALUES (1, 'Mensual', 30, 45000)
-                """);
+        // V3 ya crea los planes; las membresías de estas pruebas usan el plan con id 1
         jdbc.execute("""
                 INSERT INTO employee (id, name, username, role, pin_hash)
                 VALUES (1, 'Admin Test', 'admin', 'administrador', 'hash-placeholder')
@@ -118,6 +115,16 @@ class SchemaAndViewTest {
                 "SELECT type FROM sqlite_master WHERE name = 'v_member_status'",
                 String.class);
         assertThat(type).isEqualTo("view");
+    }
+
+    @Test
+    @Order(2)
+    void v3_creaLosCuatroPlanesConSusPrecios() {
+        List<String> planes = jdbc.queryForList(
+                "SELECT name || ':' || days || ':' || price_cents FROM plan WHERE active = 1 ORDER BY days",
+                String.class);
+        assertThat(planes).containsExactly(
+                "Semanal:7:12000", "Quincenal:15:18000", "Mensual:30:30000", "Anual:365:300000");
     }
 
     // ── 2. Vista: membresía activa ─────────────────────────────────────────────

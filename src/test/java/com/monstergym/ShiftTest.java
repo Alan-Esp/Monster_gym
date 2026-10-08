@@ -142,8 +142,6 @@ class ShiftTest extends ApiTestBase {
      * y un pago de otro turno que no debe contar.
      */
     private void insertMovements(long shiftId) {
-        jdbc.update("INSERT INTO plan (id, name, days, price_cents) VALUES (1, 'Semanal', 7, 15000), "
-                + "(3, 'Mensual', 30, 45000)");
         jdbc.update("INSERT INTO member (id, number, full_name, joined_on) VALUES (1, '0001', 'Socio Uno', '2026-01-01')");
         jdbc.update("INSERT INTO product (id, name, price_cents, stock, capacity, min_stock) VALUES "
                 + "(1, 'Agua', 1500, 10, 20, 2), (2, 'Proteína', 5500, 10, 20, 2)");

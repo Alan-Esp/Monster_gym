@@ -7,7 +7,7 @@
 - Roles: A = Administrador, R = Recepción, E = Entrenador.
 - Errores: HTTP adecuado y cuerpo
   { "error": { "code": "SIN_TURNO", "message": "Abre un turno antes de cobrar." } }
-  Códigos usados: NO_AUTENTICADO (401), SIN_PERMISO (403), CSRF_INVALIDO (403, falta o no coincide X-XSRF-TOKEN), NO_ENCONTRADO (404), VALIDACION (422, con "fields"), SIN_TURNO (409), TURNO_ABIERTO (409), STOCK_INSUFICIENTE (409), SOCIO_VENCIDO (409, requiere confirmación), DOBLE_REGISTRO (409, requiere confirmación), CUENTA_BLOQUEADA (423, tras 5 intentos fallidos; 15 minutos).
+  Códigos usados: NO_AUTENTICADO (401), SIN_PERMISO (403), CSRF_INVALIDO (403, falta o no coincide X-XSRF-TOKEN), NO_ENCONTRADO (404), VALIDACION (422, con "fields"), SIN_TURNO (409), TURNO_ABIERTO (409), STOCK_INSUFICIENTE (409), SOCIO_VENCIDO (409, requiere confirmación), DOBLE_REGISTRO (409, requiere confirmación), CUENTA_BLOQUEADA (423, tras 5 intentos fallidos; 15 minutos), PAGO_CANCELADO (409), TURNO_CERRADO (409, no se cancela un pago de un turno cerrado), NUMERO_AGOTADO (409, se pasó del socio 9999).
 - Acciones que requieren confirmación (SOCIO_VENCIDO, DOBLE_REGISTRO) se repiten con "confirm": true.
 
 ## Autenticación y turnos
@@ -41,6 +41,11 @@ Respuesta:
 | PUT /api/members/{id} | A, R | Editar datos |
 
 Ítem de lista: { id, number, fullName, phone, plan, validUntil, status }.
+Respuesta de la lista: { items, total, page, pageSize (50), registered, counts: { todos, activa, por_vencer, vencida } }.
+counts respeta q pero no status; registered es el total de socios activos sin filtros.
+Teléfono: 10 dígitos (acepta espacios, guiones y paréntesis; se guarda solo con dígitos).
+POST /api/members responde { member: <detalle>, payment: <cobro> o null }. Si trae planId exige method;
+sin turno abierto responde SIN_TURNO y no crea el socio.
 
 ## Cobros
 | POST /api/payments | A, R | { memberId, planId, method } (usa el turno abierto) |
@@ -48,6 +53,11 @@ Respuesta:
 | POST /api/payments/{id}/void | A | { reason } |
 | GET /api/plans | todos | |
 | PUT /api/plans/{id} | A | { priceCents } |
+
+Respuesta de un cobro (también cada elemento de GET /api/payments y del historial del socio), con los datos del ticket:
+{ id, folio ("000123"), member: {id, number, fullName}, plan: {id, name, days}, startsOn, endsOn,
+  amountCents, method, employeeName, paidAt, shiftId, voidedAt, voidReason }
+Solo se cancela un pago si su turno sigue abierto.
 
 ## Visitas
 | POST /api/visits | A, R | { memberId, method: "manual", confirm? } |

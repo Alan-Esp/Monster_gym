@@ -23,7 +23,18 @@ Estas son las decisiones por defecto. Si cambian, se actualiza este archivo prim
 ## Alta de socio
 - Número de socio consecutivo de 4 dígitos con ceros a la izquierda (0001, 0002...).
 - Nombre obligatorio.
-- mes 300, semana 120 quincena 180, todoos los precios pueden ser modificados solo por el administrador
+
+## Planes
+- Solo existen cuatro planes: Semanal (7 días) $120, Quincenal (15 días) $180, Mensual (30 días) $300 y Anual (365 días) $3,000.
+- El precio del Anual es provisional; confirmarlo con el dueño.
+- Solo el Administrador puede modificar los precios. Un cambio de precio no afecta pagos ya registrados.
+- Los planes se crean en la migración V3 (existen también en producción, no solo en dev).
+
+## Socios
+- Teléfono opcional; si se captura debe tener 10 dígitos (se aceptan espacios y guiones, se guardan solo los dígitos).
+- La búsqueda ignora mayúsculas, acentos y espacios; busca por nombre, número de socio o teléfono.
+- Una membresía nueva se puede capturar desde "Nuevo socio": el socio se registra y se abre Caja con el socio y el plan elegidos.
+- Un pago solo se puede cancelar mientras su turno siga abierto (un turno cerrado no se modifica).
 
 
 ## Acceso y visitas

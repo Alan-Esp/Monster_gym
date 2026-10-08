@@ -49,6 +49,9 @@ public abstract class ApiTestBase {
                 "membership", "payment", "shift", "member", "product", "plan", "employee"}) {
             jdbc.update("DELETE FROM " + table);
         }
+        // Los mismos planes que crea V3 (las pruebas pueden cambiar precios)
+        jdbc.update("INSERT INTO plan (id, name, days, price_cents) VALUES (1, 'Semanal', 7, 12000), "
+                + "(2, 'Quincenal', 15, 18000), (3, 'Mensual', 30, 30000), (4, 'Anual', 365, 300000)");
         insertEmployee(1, "Admin Prueba", "admin", "administrador", true);
         insertEmployee(2, "Rocío Recepción", "recepcion", "recepcion", true);
         insertEmployee(3, "Ernesto Entrenador", "entrenador", "entrenador", true);
