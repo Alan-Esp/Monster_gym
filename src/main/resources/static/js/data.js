@@ -73,6 +73,10 @@ window.GYM_DATA = {
     { time: '15:20', items: '1× Bebida energética', total: 38, pay: 'Efectivo' }
   ],
 
+  // Turno y conteo de efectivo para la pantalla de cierre (refri = suma de "sales" por método)
+  shift: { openingCash: 500, openedAt: null, refriCash: 93, refriCard: 90 },
+  cashCount: {},
+
   employees: [
     { name: 'Sergio Ramírez', role: 'Administrador', shift: 'Matutino', active: true },
     { name: 'Ana López', role: 'Recepción', shift: 'Vespertino', active: true },
