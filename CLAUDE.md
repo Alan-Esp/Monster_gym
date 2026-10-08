@@ -45,8 +45,8 @@ Si una instrucción mía contradice estos documentos, avísame antes de continua
 - Al terminar cada fase, marcarla abajo.
 
 ## Estado del proyecto
-- [ ] Fase 0: preparación del proyecto
-- [ ] Fase 1: base de datos
+- [x] Fase 0: preparación del proyecto
+- [x] Fase 1: base de datos
 - [ ] Fase 2: autenticación, empleados y turnos
 - [ ] Fase 3: socios, planes y cobros
 - [ ] Fase 4: acceso, visitas e inicio
