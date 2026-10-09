@@ -1,6 +1,7 @@
 package com.monstergym.setting;
 
 import com.monstergym.common.ApiException;
+import com.monstergym.fingerprint.FingerprintService;
 import com.monstergym.printing.PrinterConfig;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
@@ -21,7 +22,7 @@ import org.springframework.web.bind.annotation.RestController;
 public class SettingController {
 
     public record Settings(String gymName, int capacity, int warnDays, boolean manualAccess, boolean sound,
-                           int insideMinutes, Printing printing) {
+                           int insideMinutes, boolean fingerprintEnabled, Printing printing) {
     }
 
     /** Impresión de tickets (Fase 5B). */
@@ -39,6 +40,7 @@ public class SettingController {
             Boolean sound,
             @Min(value = 15, message = "El tiempo dentro debe ser de 15 a 600 minutos.")
             @Max(value = 600, message = "El tiempo dentro debe ser de 15 a 600 minutos.") Integer insideMinutes,
+            Boolean fingerprintEnabled,
             Boolean printEnabled,
             @Size(max = 120, message = "El nombre de la impresora es demasiado largo.") String printerName,
             @Min(value = 0, message = "La página de códigos debe ser de 0 a 255.")
@@ -53,9 +55,11 @@ public class SettingController {
     }
 
     private final SettingRepository settings;
+    private final FingerprintService fingerprints;
 
-    public SettingController(SettingRepository settings) {
+    public SettingController(SettingRepository settings, FingerprintService fingerprints) {
         this.settings = settings;
+        this.fingerprints = fingerprints;
     }
 
     @GetMapping
@@ -68,6 +72,7 @@ public class SettingController {
                 settings.getBool("manual_access", true),
                 settings.getBool("sound", true),
                 settings.getInt("inside_minutes", 120),
+                fingerprints.enabled(),
                 new Printing(p.enabled(), p.printerName(), p.codepage(), p.charsetName(), p.footer(),
                         p.timeoutSeconds(), p.retries()));
     }
@@ -84,6 +89,9 @@ public class SettingController {
         if (u.manualAccess() != null) settings.set("manual_access", u.manualAccess() ? "1" : "0");
         if (u.sound() != null) settings.set("sound", u.sound() ? "1" : "0");
         if (u.insideMinutes() != null) settings.set("inside_minutes", u.insideMinutes().toString());
+        if (u.fingerprintEnabled() != null && u.fingerprintEnabled() != fingerprints.enabled()) {
+            fingerprints.setEnabled(u.fingerprintEnabled());
+        }
 
         if (u.printEnabled() != null) settings.set("print_enabled", u.printEnabled() ? "1" : "0");
         if (u.printerName() != null) {

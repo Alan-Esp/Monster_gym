@@ -6,6 +6,7 @@ import com.monstergym.common.Times;
 import com.monstergym.member.Member;
 import com.monstergym.member.MemberRepository;
 import com.monstergym.setting.SettingRepository;
+import com.monstergym.visit.VisitDtos.FingerprintEntry;
 import com.monstergym.visit.VisitDtos.MemberRef;
 import com.monstergym.visit.VisitDtos.RegisteredVisit;
 import com.monstergym.visit.VisitDtos.VisitDay;
@@ -22,6 +23,7 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 
 @Service
 public class VisitService {
@@ -86,6 +88,36 @@ public class VisitService {
         return new RegisteredVisit(id, checkedInAt, "manual", status.status(),
                 new MemberRef(member.id(), member.number(), member.fullName(), status.plan(), status.validUntil(),
                         status.daysLeft()));
+    }
+
+    /**
+     * Entrada por huella (la registra el backend, a nombre del empleado que atiende). No pide confirmación:
+     * un socio vencido entra marcado como vencida para que recepción vea la alerta roja. Si el mismo socio ya
+     * entró hace menos de 5 minutos no se crea otra visita (duplicate = true, visit = la entrada anterior).
+     * Vacío si el socio no existe o está dado de baja.
+     */
+    @Transactional
+    public Optional<FingerprintEntry> registerFingerprint(long memberId, long employeeId) {
+        Optional<Member> found = members.findById(memberId).filter(Member::active);
+        if (found.isEmpty()) return Optional.empty();
+        Member member = found.get();
+        MemberRepository.StatusRow status = members.status(memberId);
+        MemberRef ref = new MemberRef(member.id(), member.number(), member.fullName(), status.plan(),
+                status.validUntil(), status.daysLeft());
+        LocalDateTime now = LocalDateTime.now(clock);
+
+        Optional<VisitItem> last = visits.lastVisit(memberId, Times.format(now));
+        if (last.isPresent() && Duration.between(Times.parse(last.get().checkedInAt()), now)
+                .compareTo(DOUBLE_ENTRY_WINDOW) < 0) {
+            VisitItem v = last.get();
+            return Optional.of(new FingerprintEntry(true,
+                    member.fullName() + " ya registró entrada a las " + v.time() + ".",
+                    new RegisteredVisit(v.id(), v.checkedInAt(), v.method(), status.status(), ref)));
+        }
+        String checkedInAt = Times.format(now);
+        long id = visits.insert(memberId, checkedInAt, "huella", status.status(), employeeId);
+        return Optional.of(new FingerprintEntry(false, null,
+                new RegisteredVisit(id, checkedInAt, "huella", status.status(), ref)));
     }
 
     @Transactional(readOnly = true)

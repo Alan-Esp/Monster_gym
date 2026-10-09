@@ -22,6 +22,13 @@ public final class VisitDtos {
     }
 
     /**
+     * Entrada por huella. duplicate = el socio ya había entrado hace menos de 5 minutos: no se creó otra visita,
+     * visit es la anterior (con el estado actual del socio) y message lo explica.
+     */
+    public record FingerprintEntry(boolean duplicate, String message, RegisteredVisit visit) {
+    }
+
+    /**
      * Bitácora de un día. insideNow siempre es el aforo actual; weekCount cuenta desde el lunes de esa semana
      * hasta el final del día pedido.
      */

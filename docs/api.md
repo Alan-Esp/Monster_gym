@@ -7,7 +7,7 @@
 - Roles: A = Administrador, R = Recepción, E = Entrenador.
 - Errores: HTTP adecuado y cuerpo
   { "error": { "code": "SIN_TURNO", "message": "Abre un turno antes de cobrar." } }
-  Códigos usados: NO_AUTENTICADO (401), SIN_PERMISO (403), CSRF_INVALIDO (403, falta o no coincide X-XSRF-TOKEN), NO_ENCONTRADO (404), VALIDACION (422, con "fields"), SIN_TURNO (409), TURNO_ABIERTO (409), STOCK_INSUFICIENTE (409), SOCIO_VENCIDO (409, requiere confirmación), DOBLE_REGISTRO (409, requiere confirmación), CUENTA_BLOQUEADA (423, tras 5 intentos fallidos; 15 minutos), PAGO_CANCELADO (409), TURNO_CERRADO (409, no se cancela un pago de un turno cerrado), NUMERO_AGOTADO (409, se pasó del socio 9999), ACCESO_MANUAL_DESACTIVADO (409, setting.manual_access = 0), VENTA_CANCELADA (409), OPERACION_NO_PERMITIDA (409, p. ej. desactivarse a sí mismo), IMPRESION_DESACTIVADA (409).
+  Códigos usados: NO_AUTENTICADO (401), SIN_PERMISO (403), CSRF_INVALIDO (403, falta o no coincide X-XSRF-TOKEN), NO_ENCONTRADO (404), VALIDACION (422, con "fields"), SIN_TURNO (409), TURNO_ABIERTO (409), STOCK_INSUFICIENTE (409), SOCIO_VENCIDO (409, requiere confirmación), DOBLE_REGISTRO (409, requiere confirmación), CUENTA_BLOQUEADA (423, tras 5 intentos fallidos; 15 minutos), PAGO_CANCELADO (409), TURNO_CERRADO (409, no se cancela un pago de un turno cerrado), NUMERO_AGOTADO (409, se pasó del socio 9999), ACCESO_MANUAL_DESACTIVADO (409, setting.manual_access = 0), VENTA_CANCELADA (409), OPERACION_NO_PERMITIDA (409, p. ej. desactivarse a sí mismo), IMPRESION_DESACTIVADA (409), HUELLA_DESACTIVADA (409, setting.fingerprint_enabled = 0), LECTOR_DESCONECTADO (409), CAPTURA_EN_CURSO (409, ya hay un enrolamiento en curso).
 - Acciones que requieren confirmación (SOCIO_VENCIDO, DOBLE_REGISTRO) se repiten con "confirm": true.
 
 ## Autenticación y turnos
@@ -41,7 +41,7 @@ Respuesta:
 | Método y ruta | Roles | Descripción |
 |---|---|---|
 | GET /api/members?q=&status=&page= | todos | status: activa, por_vencer, vencida. q busca por nombre, número o teléfono (sin espacios ni acentos). Devuelve conteos por estado. |
-| POST /api/members | A, R | { fullName, phone, notes, planId? , method? } si trae plan, también cobra |
+| POST /api/members | A, R | { fullName, phone, notes, planId? , method?, fingerprintEnrollmentId? } si trae plan, también cobra |
 | GET /api/members/{id} | todos | Datos, vigencia, historial de pagos y visitas |
 | PUT /api/members/{id} | A, R | Editar datos |
 
@@ -51,6 +51,8 @@ counts respeta q pero no status; registered es el total de socios activos sin fi
 Teléfono: 10 dígitos (acepta espacios, guiones y paréntesis; se guarda solo con dígitos).
 POST /api/members responde { member: <detalle>, payment: <cobro> o null }. Si trae planId exige method;
 sin turno abierto responde SIN_TURNO y no crea el socio.
+fingerprintEnrollmentId: huella capturada antes del alta con POST /api/fingerprint/enroll; si no existe o ya venció
+(30 minutos) responde VALIDACION en ese campo y no crea el socio. El detalle del socio incluye hasFingerprint.
 
 ## Cobros
 | POST /api/payments | A, R | { memberId, planId, method } (usa el turno abierto) |
@@ -95,7 +97,7 @@ GET /api/visits (date por defecto hoy) responde
 
 ## Admin
 | CRUD /api/employees | A | Alta, edición, activar/desactivar, cambio de PIN |
-| GET/PUT /api/settings | A | gymName, capacity, warnDays, manualAccess, sound, insideMinutes |
+| GET/PUT /api/settings | A | gymName, capacity, warnDays, manualAccess, sound, insideMinutes, fingerprintEnabled |
 | GET /api/reports/income-monthly?months=6 | A | [{ month, label, membershipsCents, fridgeCents, totalCents, current }] |
 | GET /api/reports/summary | A | { activeMembers, newThisMonth, renewalRate, expiredLast30Days } |
 
@@ -137,6 +139,24 @@ El cobro y el cierre se guardan aunque la impresión falle. La pantalla consulta
   (debe existir en Java; US-ASCII = sin acentos), ticketFooter (máx. 200), printTimeoutSeconds (5-120), printRetries (0-10).
 
 ## Huella (Fase 6)
-| POST /api/fingerprint/enroll/{memberId} | A, R | Inicia el enrolamiento (captura en el backend) |
-| GET /api/fingerprint/status | todos | { connected: true/false } |
-| GET /api/fingerprint/events | A, R | Server-Sent Events: identificado, no reconocido, lector desconectado |
+| POST /api/fingerprint/enroll | A, R | Captura para un socio nuevo (Nuevo socio). Responde 202 { enrollmentId } |
+| POST /api/fingerprint/enroll/{memberId} | A, R | Captura (o reemplaza) la huella de un socio existente. 202 { enrollmentId } |
+| POST /api/fingerprint/enroll/{enrollmentId}/cancel | A, R | Cancela la captura en curso (204) |
+| GET /api/fingerprint/status | todos | { enabled, connected, mode (real\|fake), detail, enrolled } |
+| GET /api/fingerprint/events | A, R | Server-Sent Events (ver abajo) |
+
+- La captura ocurre en el backend: 4 muestras del mismo dedo, hasta 30 s de espera por muestra. Una sola a la vez
+  (CAPTURA_EN_CURSO). Sin lector: LECTOR_DESCONECTADO; apagado en configuración: HUELLA_DESACTIVADA.
+- Sin memberId la plantilla queda pendiente en memoria 30 minutos, hasta que POST /api/members la reclama con
+  fingerprintEnrollmentId. Nunca se envía la plantilla al navegador.
+- Eventos SSE (data en JSON). Al conectarse, el primer evento es "estado".
+  - estado: igual que GET /api/fingerprint/status. Se manda también al conectar o desconectar el lector.
+  - enrolamiento: { enrollmentId, status: muestra\|calidad\|listo\|error, remaining (-1 si no aplica), message }.
+  - identificado: { duplicate, message, visit: <respuesta de POST /api/visits> }. duplicate = true si el socio ya
+    entró hace menos de 5 minutos: no se crea otra visita y visit es la anterior.
+  - no_reconocido: { message }.
+- La entrada por huella la registra el backend con method = huella, a nombre del Administrador o Recepción con la
+  suscripción SSE más reciente. Sin nadie suscrito, la huella se ignora.
+- Solo con el lector simulado (perfil dev), A y R: POST /api/fingerprint/fake/touch { finger } simula poner un dedo
+  ("" = mala calidad) y POST /api/fingerprint/fake/connected { connected } simula conectar o desconectar el lector.
+  Con el lector real responden 404.

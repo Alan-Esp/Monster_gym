@@ -2,6 +2,7 @@ package com.monstergym.config;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.monstergym.common.ApiErrorBody;
+import jakarta.servlet.DispatcherType;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -32,6 +33,8 @@ public class SecurityConfig {
                                            SecurityContextRepository contextRepository) throws Exception {
         http
             .authorizeHttpRequests(auth -> auth
+                // Cierre de las conexiones SSE de /api/fingerprint/events (la petición original ya se autorizó)
+                .dispatcherTypeMatchers(DispatcherType.ASYNC).permitAll()
                 .requestMatchers(HttpMethod.POST, "/api/auth/login").permitAll()
                 .requestMatchers("/api/**").authenticated()
                 .anyRequest().permitAll())

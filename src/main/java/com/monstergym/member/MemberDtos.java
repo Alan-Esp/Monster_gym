@@ -29,7 +29,7 @@ public final class MemberDtos {
 
     public record MemberDetail(long id, String number, String fullName, String phone, String notes,
                                String joinedOn, String plan, String validUntil, Integer daysLeft, String status,
-                               List<PaymentReceipt> payments, List<Visit> visits) {
+                               boolean hasFingerprint, List<PaymentReceipt> payments, List<Visit> visits) {
     }
 
     /** Alta de socio: payment es null si no se cobró un plan. */

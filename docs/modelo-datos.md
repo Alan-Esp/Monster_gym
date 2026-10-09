@@ -148,6 +148,7 @@ gym_name = Monster Gym, capacity = 120, warn_days = 3, manual_access = 1, sound 
 print_enabled = 1, printer_name = PT-210 (nombre de la impresora en Windows), ticket_chars_per_line = 32, ticket_footer = Gracias por entrenar con nosotros.
 Agregados en V5: printer_codepage (n de ESC t n), printer_charset (charset de Java), print_timeout_seconds = 20,
 print_retries = 3 (V5 también creó printer_transport, printer_port y printer_status_check, que V6 borró).
+fingerprint_enabled (Fase 6B) no tiene fila inicial: si no existe vale 1 (lector encendido).
 V6: printer_codepage = 0 y printer_charset = US-ASCII (la PT-210 no sale del modo chino: se imprime sin acentos).
 
 ## Vista v_member_status

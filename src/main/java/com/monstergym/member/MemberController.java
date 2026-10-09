@@ -43,7 +43,9 @@ public class MemberController {
             String notes,
             Long planId,
             @Pattern(regexp = PaymentController.METHOD_REGEX, message = PaymentController.METHOD_MESSAGE)
-            String method) {
+            String method,
+            @Size(max = 64, message = "La huella capturada ya no es válida. Captúrala de nuevo.")
+            String fingerprintEnrollmentId) {
     }
 
     public record UpdateRequest(
@@ -83,7 +85,7 @@ public class MemberController {
     public CreatedResponse create(@AuthenticationPrincipal EmployeePrincipal employee,
                                   @Valid @RequestBody CreateRequest body) {
         CreatedMember created = service.create(employee, body.fullName(), body.phone(), body.notes(),
-                body.planId(), body.method());
+                body.planId(), body.method(), body.fingerprintEnrollmentId());
         PaymentReceipt p = created.payment();
         // Si hubo cobro, su ticket se encola después de guardar (una falla de impresión no revierte el alta)
         return new CreatedResponse(created.member(),

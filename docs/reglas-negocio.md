@@ -144,7 +144,15 @@ Estas son las decisiones por defecto. Si cambian, se actualiza este archivo prim
 - El administrador inicial se crea con una variable de entorno, nunca en el código.
 
 ## Huella digital (Fase 6)
-- Se guarda solo la plantilla (template) de la huella, nunca la imagen.
+- Se guarda solo la plantilla (template) de la huella, nunca la imagen. Es el formato propio del SDK de
+  DigitalPersona (One Touch for Windows 1.6.1), en member.fingerprint_template.
 - El enrolamiento requiere consentimiento del socio y aviso de privacidad entregado.
+  PENDIENTE: por decisión del 2026-10-08 todavía no se pide ni se guarda (fingerprint_consent_at queda vacío).
+  Resolver antes de la entrega (Fase 7).
 - Si el lector falla o se desconecta, el sistema sigue operando con acceso manual.
-- Identificación 1 a N con las plantillas cargadas en memoria al arrancar.
+- Identificación 1 a N con las plantillas cargadas en memoria al arrancar. El SDK solo compara 1 a 1, así que se
+  recorren las plantillas (~1 ms cada una), primero las de los socios que vinieron más recientemente.
+- Entrada por huella: se registra sola, sin confirmación, a nombre de quien atiende (la sesión de Administrador o
+  Recepción conectada más reciente). Socio vencido: se registra como vencida y se muestra la alerta roja.
+  Si el mismo socio ya entró hace menos de 5 minutos, no se crea otra visita: se avisa "ya registró entrada".
+- Admin > Configuración > Lector de huella (setting.fingerprint_enabled) apaga o enciende el lector.

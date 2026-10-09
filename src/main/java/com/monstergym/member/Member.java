@@ -7,5 +7,6 @@ public record Member(
         String phone,
         String notes,
         String joinedOn,
-        boolean active) {
+        boolean active,
+        boolean hasFingerprint) {
 }

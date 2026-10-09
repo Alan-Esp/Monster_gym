@@ -45,6 +45,12 @@ public class VisitRepository {
                 String.class, memberId, upTo));
     }
 
+    /** Última visita del socio hasta upTo (inclusive). */
+    public Optional<VisitItem> lastVisit(long memberId, String upTo) {
+        return jdbc.query(SELECT_ITEM + " WHERE v.member_id = ? AND v.checked_in_at <= ? "
+                + "ORDER BY v.checked_in_at DESC, v.id DESC LIMIT 1", ITEM, memberId, upTo).stream().findFirst();
+    }
+
     public long insert(long memberId, String checkedInAt, String method, String statusAtEntry, long employeeId) {
         KeyHolder keys = new GeneratedKeyHolder();
         jdbc.update(con -> {

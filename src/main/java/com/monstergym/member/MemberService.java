@@ -3,6 +3,7 @@ package com.monstergym.member;
 import com.monstergym.auth.EmployeePrincipal;
 import com.monstergym.common.ApiException;
 import com.monstergym.common.SearchText;
+import com.monstergym.fingerprint.FingerprintService;
 import com.monstergym.member.MemberDtos.CreatedMember;
 import com.monstergym.member.MemberDtos.MemberDetail;
 import com.monstergym.member.MemberDtos.MemberItem;
@@ -32,13 +33,15 @@ public class MemberService {
     private final MemberRepository members;
     private final PaymentRepository payments;
     private final PaymentService paymentService;
+    private final FingerprintService fingerprints;
     private final Clock clock;
 
     public MemberService(MemberRepository members, PaymentRepository payments, PaymentService paymentService,
-                         Clock clock) {
+                         FingerprintService fingerprints, Clock clock) {
         this.members = members;
         this.payments = payments;
         this.paymentService = paymentService;
+        this.fingerprints = fingerprints;
         this.clock = clock;
     }
 
@@ -60,10 +63,13 @@ public class MemberService {
         return new MemberPage(items, total, p, PAGE_SIZE, members.countActive(), counts);
     }
 
-    /** Alta de socio. Si trae plan, cobra en la misma transacción: sin turno abierto no se crea nada. */
+    /**
+     * Alta de socio. Si trae plan, cobra en la misma transacción: sin turno abierto no se crea nada.
+     * fingerprintEnrollmentId: huella capturada antes del alta (POST /api/fingerprint/enroll), se guarda aquí.
+     */
     @Transactional
     public CreatedMember create(EmployeePrincipal employee, String fullName, String phone, String notes,
-                                Long planId, String method) {
+                                Long planId, String method, String fingerprintEnrollmentId) {
         if (planId != null && method == null) {
             throw ApiException.invalidField("method", PaymentController.METHOD_MESSAGE);
         }
@@ -74,6 +80,9 @@ public class MemberService {
         }
         long id = members.insert(String.format("%04d", next), cleanName(fullName), cleanPhone(phone),
                 cleanNotes(notes), LocalDate.now(clock).toString());
+        if (fingerprintEnrollmentId != null && !fingerprintEnrollmentId.isBlank()) {
+            fingerprints.attachPending(id, fingerprintEnrollmentId.trim());
+        }
         PaymentReceipt receipt = planId == null ? null : paymentService.charge(employee, id, planId, method);
         return new CreatedMember(detail(id), receipt);
     }
@@ -85,7 +94,7 @@ public class MemberService {
                 .orElseThrow(() -> ApiException.notFound("No se encontró el socio."));
         MemberRepository.StatusRow s = members.status(id);
         return new MemberDetail(m.id(), m.number(), m.fullName(), m.phone(), m.notes(), m.joinedOn(),
-                s.plan(), s.validUntil(), s.daysLeft(), s.status(),
+                s.plan(), s.validUntil(), s.daysLeft(), s.status(), m.hasFingerprint(),
                 payments.findByMember(id), members.recentVisits(id, 50));
     }
 

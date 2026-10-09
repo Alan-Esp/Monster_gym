@@ -35,7 +35,8 @@ public class MemberRepository {
             rs.getString("phone"),
             rs.getString("notes"),
             rs.getString("joined_on"),
-            rs.getInt("active") == 1);
+            rs.getInt("active") == 1,
+            rs.getBytes("fingerprint_template") != null);
 
     private static final RowMapper<MemberItem> ITEM = (rs, i) -> new MemberItem(
             rs.getLong("id"),
