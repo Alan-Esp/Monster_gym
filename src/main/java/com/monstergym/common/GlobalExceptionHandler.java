@@ -10,7 +10,9 @@ import org.springframework.web.ErrorResponse;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.context.request.async.AsyncRequestNotUsableException;
 
+import java.io.IOException;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
@@ -44,6 +46,15 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(AccessDeniedException.class)
     public ResponseEntity<ApiErrorBody> handleAccessDenied(AccessDeniedException ex) {
         return ResponseEntity.status(HttpStatus.FORBIDDEN).body(ApiErrorBody.SIN_PERMISO);
+    }
+
+    /**
+     * El navegador cerró la conexión (p. ej. una pestaña con /api/fingerprint/events abierta). No es un error de
+     * la app y ya no hay a quién responder.
+     */
+    @ExceptionHandler({AsyncRequestNotUsableException.class, IOException.class})
+    public void handleClientGone(Exception ex) {
+        log.debug("El cliente cerró la conexión: {}", ex.getMessage());
     }
 
     @ExceptionHandler(Exception.class)

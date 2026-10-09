@@ -119,6 +119,24 @@
       register: data => request('POST', '/api/visits', data),
       day: date => request('GET', '/api/visits' + (date ? '?date=' + encodeURIComponent(date) : ''))
     },
+    // Huella: la captura ocurre en el servidor; el progreso y las entradas llegan por events() (SSE)
+    fingerprint: {
+      status: () => request('GET', '/api/fingerprint/status'),
+      // Sin memberId: socio nuevo, la huella queda pendiente hasta members.create({ fingerprintEnrollmentId })
+      enroll: memberId => request('POST', '/api/fingerprint/enroll' + (memberId ? '/' + encodeURIComponent(memberId) : '')),
+      cancel: enrollmentId => request('POST', '/api/fingerprint/enroll/' + encodeURIComponent(enrollmentId) + '/cancel'),
+      // Solo con el lector simulado (perfil dev)
+      fakeTouch: finger => request('POST', '/api/fingerprint/fake/touch', { finger }),
+      // handlers: { estado, enrolamiento, identificado, no_reconocido, error }. Devuelve el EventSource (close() para salir)
+      events(handlers) {
+        const source = new EventSource('/api/fingerprint/events');
+        ['estado', 'enrolamiento', 'identificado', 'no_reconocido'].forEach(name => {
+          if (handlers[name]) source.addEventListener(name, e => handlers[name](JSON.parse(e.data)));
+        });
+        if (handlers.error) source.onerror = () => handlers.error(source);
+        return source;
+      }
+    },
     dashboard: () => request('GET', '/api/dashboard'),
     payments: {
       create: data => request('POST', '/api/payments', data),

@@ -224,7 +224,7 @@
               <span class="scanner__sub" id="scanSub">Lector desconectado · usa el acceso manual</span>
             </div>
           </div>
-          <button class="btn btn--primary btn--xl">Escanear huella</button>
+          <button class="btn btn--primary btn--xl" id="scanBtn">Escanear huella</button>
         </div>
         <div class="grow-side stack-16">
           <div class="card card--pad-sm stack-14">
@@ -272,13 +272,13 @@
         </div>
       </div>
       <div class="card card--pad row" style="gap:20px;flex-wrap:wrap">
-        <div class="fp-box"><i></i><i></i></div>
+        <div class="fp-box" id="newFpBox"><i></i><i></i></div>
         <div class="col" style="gap:4px;flex:1;min-width:200px">
           <h2 class="h2">Huella digital</h2>
-          <span style="font-size:14px;font-weight:600">Sin huella registrada</span>
-          <span class="muted" style="font-size:13px">Pide al socio que coloque su dedo en el lector</span>
+          <span style="font-size:14px;font-weight:600" id="newFpTitle">Sin huella registrada</span>
+          <span class="muted" style="font-size:13px" id="newFpSub">Pide al socio que coloque su dedo en el lector</span>
         </div>
-        <button class="btn-sm" style="height:42px;padding:0 18px">Capturar huella</button>
+        <button class="btn-sm" style="height:42px;padding:0 18px" id="newFpBtn">Capturar huella</button>
       </div>
       <div class="card card--pad col" style="gap:18px">
         <div class="check is-on" id="withPlan">

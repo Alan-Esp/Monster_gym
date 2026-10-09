@@ -1,8 +1,7 @@
 (function () {
   'use strict';
 
-  const D = window.GYM_DATA;
-  const $ = (sel, root = document) => root.querySelector(sel);
+  const $ =(sel, root = document) => root.querySelector(sel);
   const $$ = (sel, root = document) => Array.from(root.querySelectorAll(sel));
   // money recibe pesos; lo que viene de la API (centavos) se convierte con pesos() al mostrar
   const money = n => '$' + n.toLocaleString('es-MX', { minimumFractionDigits: Number.isInteger(n) ? 0 : 2, maximumFractionDigits: 2 });
@@ -35,6 +34,7 @@
     if (screen === 'visitas') loadVisits();
     if (screen === 'socios') loadMembers();
     if (screen === 'nuevo') resetNewMember();
+    else cancelNewFp();  // salir de Nuevo socio cancela una captura de huella en curso
     if (screen === 'caja') loadCaja();
     window.scrollTo(0, 0);
   }
@@ -69,6 +69,7 @@
   }
 
   function enterApp(me) {
+    startFingerprint(me);
     renderUser(me);
     loadPlans();
     if (!me.shift && canOpenShift(me)) { showGate('apertura'); return; }
@@ -104,6 +105,8 @@
     showLoginError('El acceso con huella estará disponible cuando se conecte el lector.'));
 
   async function logout() {
+    stopFingerprint();
+    setFpStatus(null);
     try { await API.logout(); } catch (err) { /* la sesión ya no existe */ }
     $('#loginForm').reset();
     showGate('login');
@@ -113,7 +116,7 @@
     logout();
   }));
   $('#userInitials').addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') e.target.click(); });
-  API.onUnauthorized(() => showGate('login'));
+  API.onUnauthorized(() => { stopFingerprint(); showGate('login'); });
 
   $('#openingCash').addEventListener('input', e => { e.target.value = e.target.value.replace(/[^0-9]/g, ''); });
   $('#openShift').addEventListener('click', async e => {
@@ -312,15 +315,90 @@
     $$('[data-now]').forEach(el => { el.textContent = hhmm(d); });
   }
 
-  /* ---------- Estado del lector ---------- */
-  function renderFingerprint() {
-    const on = D.fingerprintConnected;
+  /* ---------- Lector de huella ---------- */
+  // Estado real del lector: llega por SSE (Administrador y Recepción) o por GET /api/fingerprint/status (Entrenador).
+  // La captura y la identificación ocurren en el servidor; si el lector falla, todo sigue con acceso manual.
+  let fpStatus = null;     // { enabled, connected, mode, detail, enrolled } o null = sin datos
+  let fpEvents = null;     // EventSource de /api/fingerprint/events
+  let fpRetryTimer;
+  const fpFake = () => !!(fpStatus && fpStatus.mode === 'fake');
+
+  /* fp: respuesta de GET /api/fingerprint/status (o null si no se sabe) */
+  function renderFingerprint(fp) {
+    const on = !!(fp && fp.connected);
     $('#fpStatus').classList.toggle('is-on', on);
     $('#fpLabel').textContent = on ? 'Huella conectada' : 'Sin huella';
-    $('#scanSub').textContent = on ? 'Pide al socio que coloque su dedo en el lector' : 'Lector desconectado · usa el acceso manual';
-    $('#toggleFp').classList.toggle('is-on', on);
-    $('#cfgFpDesc').textContent = on ? 'Conectado' : 'Desconectado';
+    $('#fpStatus').title = fp ? fp.detail : '';
+    if (!scanTimer) {
+      $('#scanSub').textContent = on ? 'Pide al socio que coloque su dedo en el lector'
+        : (fp && !fp.enabled ? 'Lector desactivado' : 'Lector desconectado') + ' · usa el acceso manual';
+    }
+    // El lector real captura solo; el botón solo existe para simular huellas en desarrollo
+    $('#scanBtn').style.display = fpFake() ? '' : 'none';
+    $('#scanBtn').disabled = !on;
+    $('#toggleFp').classList.toggle('is-on', !!(fp && fp.enabled));
+    $('#cfgFpDesc').textContent = !fp ? 'Sin datos del lector'
+      : !fp.enabled ? 'Desactivado: solo acceso manual'
+      : fp.connected ? `Conectado · ${fp.enrolled} socio(s) con huella${fp.mode === 'fake' ? ' (simulado)' : ''}`
+      : fp.detail;
+    if (!newFp.id) renderNewFp(null);
   }
+
+  function setFpStatus(fp) {
+    fpStatus = fp;
+    renderFingerprint(fp);
+  }
+
+  // Administrador y Recepción escuchan los eventos; el Entrenador solo consulta el estado
+  function startFingerprint(me) {
+    stopFingerprint();
+    if (!canOpenShift(me)) {
+      API.fingerprint.status().then(setFpStatus).catch(() => setFpStatus(null));
+      return;
+    }
+    fpEvents = API.fingerprint.events({
+      estado: setFpStatus,
+      identificado: onFpIdentified,
+      no_reconocido: onFpNotRecognized,
+      enrolamiento: onFpEnroll,
+      error: source => {
+        // El navegador reintenta solo si la conexión se cortó; si el servidor la rechazó, se reintenta aquí
+        setFpStatus(null);
+        if (source.readyState === EventSource.CLOSED) {
+          clearTimeout(fpRetryTimer);
+          fpRetryTimer = setTimeout(() => { if (currentUser) API.me().then(startFingerprint).catch(() => {}); }, 10000);
+        }
+      }
+    });
+  }
+
+  function stopFingerprint() {
+    clearTimeout(fpRetryTimer);
+    if (fpEvents) fpEvents.close();
+    fpEvents = null;
+  }
+
+  /* Entrada por huella (evento identificado): e = { duplicate, message, visit } */
+  function onFpIdentified(e) {
+    showEntry(e.visit, e.duplicate ? e.message : null);
+    if ($('[data-screen="acceso"]').classList.contains('is-active')) loadAccess();
+  }
+
+  function onFpNotRecognized(e) {
+    clearTimeout(scanTimer);
+    [$('#rings'), $('#scanTitle')].forEach(el => { el.classList.remove(...SCAN_CLASSES); el.classList.add('t-v'); });
+    $('#scanTitle').textContent = 'Huella no reconocida';
+    $('#scanSub').textContent = e.message;
+    scanTimer = setTimeout(resetScan, 4000);
+  }
+
+  // Simulación en desarrollo: "Escanear huella" pide el nombre del dedo simulado
+  $('#scanBtn').addEventListener('click', async () => {
+    const finger = prompt('Lector simulado: escribe el dedo a simular (el mismo texto con que se capturó, '
+      + 'en Nuevo socio es el nombre del socio).');
+    if (finger === null) return;
+    try { await API.fingerprint.fakeTouch(finger.trim()); } catch (err) { if (err.status !== 401) alert(err.message); }
+  });
 
   /* ---------- Totales ---------- */
   /* t: { mem, refri, total } en pesos; solo actualiza los totales dentro de root (cada pantalla tiene su fuente) */
@@ -488,20 +566,23 @@
   /* Resultado de la entrada en la tarjeta del lector: verde activa, ámbar por vencer, rojo vencida */
   let scanTimer;
   const SCAN_CLASSES = ['t-a', 't-p', 't-v'];
-  function showEntry(v) {
+  /* v: respuesta de POST /api/visits (o la visita del evento identificado); duplicateMsg: ya había entrado */
+  function showEntry(v, duplicateMsg) {
     const k = STATUS_K[v.statusAtEntry], m = v.member;
     clearTimeout(scanTimer);
     [$('#rings'), $('#scanTitle')].forEach(el => { el.classList.remove(...SCAN_CLASSES); el.classList.add('t-' + k); });
     $('#scanTitle').textContent = m.fullName;
     const vigencia = !m.validUntil ? 'sin membresía pagada'
       : (k === 'v' ? 'venció el ' : 'vence el ') + fmtDay(m.validUntil);
-    $('#scanSub').textContent = `Entrada registrada ${v.checkedInAt.slice(11, 16)} · Membresía ${STATUS[k].toLowerCase()} · ${vigencia}`;
+    const entrada = duplicateMsg ? duplicateMsg.replace(/\.$/, '') : 'Entrada registrada ' + v.checkedInAt.slice(11, 16);
+    $('#scanSub').textContent = `${entrada} · Membresía ${STATUS[k].toLowerCase()} · ${vigencia}`;
     scanTimer = setTimeout(resetScan, 6000);
   }
   function resetScan() {
+    scanTimer = null;
     [$('#rings'), $('#scanTitle')].forEach(el => el.classList.remove(...SCAN_CLASSES));
     $('#scanTitle').textContent = 'Esperando huella';
-    renderFingerprint();
+    renderFingerprint(fpStatus);
   }
 
   async function registerEntry(member, confirm) {
@@ -780,7 +861,71 @@
     btn.textContent = withPlan ? 'Registrar socio y cobrar' : 'Registrar socio';
     btn.disabled = !$('#newName').value.trim();
   }
+  /* Huella del socio nuevo: se captura antes del alta y el servidor la guarda al registrar (fingerprintEnrollmentId) */
+  let newFp = { id: null, done: false };
+  const NEW_FP_IDLE = { title: 'Sin huella registrada', sub: 'Pide al socio que coloque su dedo en el lector' };
+
+  /* s: { title, sub, color?, btn? } o null = estado inicial según el lector */
+  function renderNewFp(s) {
+    const on = !!(fpStatus && fpStatus.connected);
+    const st = s || (on ? NEW_FP_IDLE : { title: NEW_FP_IDLE.title,
+      sub: (fpStatus && !fpStatus.enabled ? 'Lector desactivado' : 'Lector desconectado') + ': puedes registrar al socio sin huella' });
+    $('#newFpTitle').textContent = st.title;
+    $('#newFpSub').textContent = st.sub;
+    $('#newFpBox').style.color = st.color || '';
+    $('#newFpBtn').textContent = st.btn || 'Capturar huella';
+    $('#newFpBtn').disabled = !st.btn && !on;
+  }
+
+  function cancelNewFp() {
+    if (newFp.id && !newFp.done) API.fingerprint.cancel(newFp.id).catch(() => {});
+    newFp = { id: null, done: false };
+  }
+
+  $('#newFpBtn').addEventListener('click', async e => {
+    if (newFp.id && !newFp.done) { cancelNewFp(); renderNewFp(null); return; }
+    const btn = e.target;
+    btn.disabled = true;
+    try {
+      newFp = { id: (await API.fingerprint.enroll()).enrollmentId, done: false };
+      renderNewFp({ title: 'Capturando huella…', sub: 'Coloca el mismo dedo 4 veces en el lector', color: 'var(--amber)', btn: 'Cancelar' });
+      if (fpFake()) simulateEnroll(newFp.id);
+    } catch (err) {
+      if (err.status !== 401) renderNewFp({ title: 'No se capturó la huella', sub: err.message, color: 'var(--red)', btn: 'Reintentar' });
+    } finally {
+      btn.disabled = false;
+    }
+  });
+
+  // Lector simulado: pone 4 veces el "dedo" con el nombre escrito (para identificarlo después en Acceso)
+  async function simulateEnroll(id) {
+    const finger = $('#newName').value.trim() || 'socio';
+    for (let i = 0; i < 4 && newFp.id === id && !newFp.done; i++) {
+      await sleep(500);
+      await API.fingerprint.fakeTouch(finger).catch(() => {});
+    }
+  }
+
+  /* Evento enrolamiento: e = { enrollmentId, status (muestra|calidad|listo|error), remaining, message } */
+  function onFpEnroll(e) {
+    if (e.enrollmentId !== newFp.id) return;
+    if (e.status === 'muestra') {
+      renderNewFp({ title: 'Capturando huella…', sub: e.remaining > 0 ? `Muestra aceptada · faltan ${e.remaining}` : 'Generando la plantilla…',
+        color: 'var(--amber)', btn: 'Cancelar' });
+    } else if (e.status === 'calidad') {
+      renderNewFp({ title: 'Capturando huella…', sub: e.message, color: 'var(--amber)', btn: 'Cancelar' });
+    } else if (e.status === 'listo') {
+      newFp.done = true;
+      renderNewFp({ title: 'Huella capturada', sub: 'Se guardará al registrar al socio', color: 'var(--lime)', btn: 'Capturar de nuevo' });
+    } else {
+      newFp = { id: null, done: false };
+      renderNewFp({ title: 'No se capturó la huella', sub: e.message, color: 'var(--red)', btn: 'Reintentar' });
+    }
+  }
+
   function resetNewMember() {
+    cancelNewFp();
+    renderNewFp(null);
     ['#newName', '#newPhone'].forEach(s => { $(s).value = ''; $(s).setCustomValidity(''); });
     $('#withPlan').classList.add('is-on');
     $('#newPlans').style.display = '';
@@ -795,9 +940,13 @@
     const withPlan = $('#withPlan').classList.contains('is-on');
     const planBtn = $('#newPlans .plan.is-active');
     if (withPlan && !planBtn) { alert('Elige el plan de la membresía.'); return; }
+    if (newFp.id && !newFp.done && !confirm('La huella todavía se está capturando. ¿Registrar al socio sin huella?')) return;
     btn.disabled = true;
     try {
-      const res = await API.members.create({ fullName: $('#newName').value, phone: $('#newPhone').value.trim() || null });
+      const res = await API.members.create({ fullName: $('#newName').value, phone: $('#newPhone').value.trim() || null,
+        fingerprintEnrollmentId: newFp.done ? newFp.id : null });
+      if (!newFp.done) cancelNewFp();
+      newFp = { id: null, done: false };
       if (withPlan) {
         // Se abre Caja con el socio y el plan elegidos; ahí se escoge el método y se cobra
         cajaMember = res.member;
@@ -812,6 +961,9 @@
         const input = f.fullName ? $('#newName') : $('#newPhone');
         input.setCustomValidity(f.fullName || f.phone);
         input.reportValidity();
+      } else if (f.fingerprintEnrollmentId) {
+        newFp = { id: null, done: false };
+        renderNewFp({ title: 'Captura la huella de nuevo', sub: f.fingerprintEnrollmentId, color: 'var(--red)', btn: 'Capturar huella' });
       } else if (err.status !== 401) {
         alert(err.message);
       }
@@ -1206,6 +1358,16 @@
       input.reportValidity();
     }
   }
+  // Admin > Configuración > Lector de huella: apagado, el lector no captura y todo es acceso manual
+  async function toggleFingerprint() {
+    const enable = !(fpStatus && fpStatus.enabled);
+    try {
+      settings = await API.settings.update({ fingerprintEnabled: enable });
+      setFpStatus(await API.fingerprint.status());
+    } catch (err) {
+      if (err.status !== 401) alert(err.message);
+    }
+  }
   const text = v => v.trim();
   [['#cfgName', 'gymName', text], ['#cfgCapacity', 'capacity', Number], ['#cfgWarn', 'warnDays', Number],
     ['#cfgPrinterName', 'printerName', text], ['#cfgCodepage', 'printerCodepage', Number],
@@ -1256,8 +1418,8 @@
       const tg = e.target.closest('[data-toggle]');
       if (tg) { saveSetting(tg, tg.dataset.toggle, !tg.classList.contains('is-on')); return; }
 
-      // Estado del lector simulado hasta la Fase 6
-      if (e.target.closest('#toggleFp')) { D.fingerprintConnected = !D.fingerprintConnected; renderFingerprint(); return; }
+      // Lector de huella: el estado nuevo llega por el evento estado (SSE)
+      if (e.target.closest('#toggleFp')) { toggleFingerprint(); return; }
 
       if (e.target.closest('#withPlan')) {
         const on = $('#withPlan').classList.toggle('is-on');
@@ -1275,7 +1437,7 @@
   /* ---------- Inicio de la app ---------- */
   tick();
   setInterval(tick, 1000);
-  renderFingerprint();
+  renderFingerprint(null);
   // Cada pantalla carga sus datos de la API al abrirse (ver go)
   initCarousel();
   renderDenoms();

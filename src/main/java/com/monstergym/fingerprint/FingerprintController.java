@@ -3,6 +3,7 @@ package com.monstergym.fingerprint;
 import com.monstergym.auth.EmployeePrincipal;
 import com.monstergym.common.ApiException;
 import com.monstergym.fingerprint.FingerprintService.Status;
+import jakarta.servlet.DispatcherType;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
@@ -53,6 +54,8 @@ public class FingerprintController {
     @GetMapping(path = "/events", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     @PreAuthorize("hasAnyRole('ADMINISTRADOR', 'RECEPCION')")
     public SseEmitter events(@AuthenticationPrincipal EmployeePrincipal employee, HttpServletRequest request) {
+        // Si el navegador corta la conexión, Tomcat vuelve a entrar aquí con un despacho de error: no hay que suscribir
+        if (request.getDispatcherType() != DispatcherType.REQUEST) return null;
         return events.subscribe(employee.id(), request.getSession().getId(), "estado", service.status());
     }
 
