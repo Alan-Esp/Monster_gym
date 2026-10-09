@@ -50,6 +50,8 @@ public abstract class ApiTestBase {
         registry.add("app.printer.mode", () -> "fake");
         registry.add("app.printer.fake-dir", () -> "target/tickets-test");
         registry.add("app.printer.retry-delays-ms", () -> "20");
+        // Ni el lector de huella real
+        registry.add("app.fingerprint.mode", () -> "fake");
     }
 
     @BeforeEach
