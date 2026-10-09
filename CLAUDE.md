@@ -52,5 +52,5 @@ Si una instrucción mía contradice estos documentos, avísame antes de continua
 - [x] Fase 4: acceso, visitas e inicio
 - [x] Fase 5: refri (POS) y admin
 - [x] Fase 5B: tickets en impresora térmica 58 mm
-- [ ] Fase 6: lector de huella
+- [x] Fase 6: lector de huella
 - [ ] Fase 7: entrega e instalación
