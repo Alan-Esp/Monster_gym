@@ -46,6 +46,18 @@
       <artifactId>sqlite-jdbc</artifactId>
       <version>3.46.1.0</version>
     </dependency>
+    <!-- Lector de huella: One Touch for Windows SDK 1.6.1. No está en Maven Central:
+         se instala en ~/.m2 con tools/instalar-sdk-huella.bat -->
+    <dependency>
+      <groupId>com.digitalpersona</groupId>
+      <artifactId>dpotapi</artifactId>
+      <version>1.6.1</version>
+    </dependency>
+    <dependency>
+      <groupId>com.digitalpersona</groupId>
+      <artifactId>dpotjni</artifactId>
+      <version>1.6.1</version>
+    </dependency>
     <dependency>
       <groupId>org.springframework.boot</groupId>
       <artifactId>spring-boot-devtools</artifactId>
