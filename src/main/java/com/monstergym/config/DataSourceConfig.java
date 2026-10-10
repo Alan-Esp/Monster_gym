@@ -9,6 +9,9 @@ import org.sqlite.SQLiteConfig;
 import org.sqlite.SQLiteDataSource;
 
 import javax.sql.DataSource;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 
 @Configuration
 public class DataSourceConfig {
@@ -17,7 +20,11 @@ public class DataSourceConfig {
     private String dbPath;
 
     @Bean
-    public DataSource dataSource() {
+    public DataSource dataSource() throws IOException {
+        // En una PC nueva la carpeta de datos todavía no existe (SQLite no la crea)
+        Path parent = Path.of(dbPath).toAbsolutePath().getParent();
+        if (parent != null) Files.createDirectories(parent);
+
         SQLiteConfig sqLiteConfig = new SQLiteConfig();
         sqLiteConfig.enforceForeignKeys(true);
         sqLiteConfig.setJournalMode(SQLiteConfig.JournalMode.WAL);
