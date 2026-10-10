@@ -165,6 +165,12 @@ public class MemberRepository {
                 fullName, phone, notes, SearchText.key(fullName), id);
     }
 
+    /** Baja lógica: el socio deja de aparecer y se borra su huella; pagos y visitas se conservan. */
+    public void deactivate(long id) {
+        jdbc.update("UPDATE member SET active = 0, fingerprint_template = NULL, fingerprint_consent_at = NULL "
+                + "WHERE id = ?", id);
+    }
+
     /** Llena search_key de los socios que aún no la tienen (seed de dev o datos previos a V3). */
     public int backfillSearchKeys() {
         List<Map.Entry<Long, String>> pending = jdbc.query(

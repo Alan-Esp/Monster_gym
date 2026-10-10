@@ -107,6 +107,16 @@ public class MemberService {
         return detail(id);
     }
 
+    /** Baja lógica (solo Administrador): deja de aparecer y se borra su huella; su historial se conserva. */
+    @Transactional
+    public void deactivate(long id) {
+        members.findById(id)
+                .filter(Member::active)
+                .orElseThrow(() -> ApiException.notFound("No se encontró el socio."));
+        members.deactivate(id);
+        fingerprints.forget(id);
+    }
+
     private static String cleanName(String name) {
         String n = name.trim().replaceAll("\\s+", " ");
         if (SearchText.key(n).isEmpty()) {

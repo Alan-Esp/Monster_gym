@@ -319,19 +319,27 @@ public class FingerprintService implements SmartLifecycle {
                     "La huella capturada ya no es válida. Captúrala de nuevo.");
         }
         repository.save(memberId, p.bytes());
-        Runnable publish = () -> {
+        afterCommit(() -> {
             pending.remove(enrollmentId);
             put(memberId, p.template());
-        };
+        });
+    }
+
+    /** Baja de socio: su plantilla deja de identificarse en cuanto se confirma la transacción. */
+    public void forget(long memberId) {
+        afterCommit(() -> remove(memberId));
+    }
+
+    private static void afterCommit(Runnable action) {
         if (TransactionSynchronizationManager.isSynchronizationActive()) {
             TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
                 @Override
                 public void afterCommit() {
-                    publish.run();
+                    action.run();
                 }
             });
         } else {
-            publish.run();
+            action.run();
         }
     }
 

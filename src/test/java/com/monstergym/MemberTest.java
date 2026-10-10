@@ -13,6 +13,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.contains;
 import static org.hamcrest.Matchers.containsInAnyOrder;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
@@ -228,5 +229,55 @@ class MemberTest extends ApiTestBase {
         buscar("ortegaruiz").andExpect(jsonPath("$.items[*].number", contains("0412")));
 
         mvc.perform(get("/api/members/999").session(s)).andExpect(status().isNotFound());
+    }
+
+    // ── Baja ───────────────────────────────────────────────────────────────────
+
+    @Test
+    void baja_soloElAdministrador() throws Exception {
+        socios();
+        for (String user : new String[]{"recepcion", "entrenador"}) {
+            mvc.perform(delete("/api/members/1").session(loginAs(user)).with(csrf()))
+                    .andExpect(status().isForbidden());
+        }
+        assertThat(jdbc.queryForObject("SELECT active FROM member WHERE id = 1", Integer.class)).isEqualTo(1);
+    }
+
+    @Test
+    void baja_ocultaAlSocioPeroConservaSuHistorial() throws Exception {
+        socios();
+        jdbc.update("UPDATE member SET fingerprint_template = X'01', fingerprint_consent_at = '2026-01-01' WHERE id = 1");
+        jdbc.update("INSERT INTO visit (member_id, employee_id, checked_in_at, method, status_at_entry) "
+                + "VALUES (1, 2, '2026-01-02T10:00:00', 'manual', 'activa')");
+        MockHttpSession admin = loginAs("admin");
+
+        mvc.perform(delete("/api/members/1").session(admin).with(csrf())).andExpect(status().isNoContent());
+
+        mvc.perform(get("/api/members/1").session(admin)).andExpect(status().isNotFound());
+        buscar("daniela").andExpect(jsonPath("$.items").isEmpty());
+        mvc.perform(get("/api/members").session(admin))
+                .andExpect(jsonPath("$.counts.todos").value(4))
+                .andExpect(jsonPath("$.registered").value(4));
+        assertThat(jdbc.queryForMap("SELECT active, fingerprint_template, fingerprint_consent_at FROM member WHERE id = 1"))
+                .containsEntry("active", 0)
+                .containsEntry("fingerprint_template", null)
+                .containsEntry("fingerprint_consent_at", null);
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM payment WHERE member_id = 1", Integer.class)).isEqualTo(1);
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM visit WHERE member_id = 1", Integer.class)).isEqualTo(1);
+        // Ya no se puede cobrar ni editar
+        mvc.perform(put("/api/members/1").session(admin).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON).content(body(socio("Otro", null))))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void baja_deSocioInexistenteOYaDadoDeBaja() throws Exception {
+        socios();
+        MockHttpSession admin = loginAs("admin");
+        mvc.perform(delete("/api/members/999").session(admin).with(csrf())).andExpect(status().isNotFound());
+        mvc.perform(delete("/api/members/1").session(admin).with(csrf())).andExpect(status().isNoContent());
+        mvc.perform(delete("/api/members/1").session(admin).with(csrf()))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.error.code").value("NO_ENCONTRADO"));
     }
 }

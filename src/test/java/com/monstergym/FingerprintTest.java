@@ -21,6 +21,7 @@ import java.util.function.BooleanSupplier;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
@@ -382,5 +383,23 @@ class FingerprintTest extends ApiTestBase {
                 .andExpect(status().isOk());
         touch("ana", 1);
         assertThat(visits()).isEqualTo(1);
+    }
+
+    @Test
+    void socioDadoDeBaja_suHuellaYaNoSeReconoce() throws Exception {
+        insertMember(1, "0001", "Ana Uno", null, 10);
+        MockHttpSession s = loginAs("recepcion");
+        MvcResult stream = subscribe(s);
+        enrollExisting(s, stream, 1, "ana");
+        assertThat(service.status().enrolled()).isEqualTo(1);
+
+        mvc.perform(delete("/api/members/1")
+                        .session(loginAs("admin")).with(csrf()))
+                .andExpect(status().isNoContent());
+
+        assertThat(service.status().enrolled()).isZero();
+        touch("ana", 1);
+        assertThat(visits()).isZero();
+        assertThat(sse(stream)).contains("event:no_reconocido");
     }
 }

@@ -15,6 +15,7 @@ import jakarta.validation.constraints.Size;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -102,5 +103,13 @@ public class MemberController {
     @PreAuthorize("hasAnyRole('ADMINISTRADOR', 'RECEPCION')")
     public MemberDetail update(@PathVariable long id, @Valid @RequestBody UpdateRequest body) {
         return service.update(id, body.fullName(), body.phone(), body.notes());
+    }
+
+    /** Baja lógica: el socio no se borra (sus pagos y visitas quedan en el historial). */
+    @DeleteMapping("/{id}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    @PreAuthorize("hasRole('ADMINISTRADOR')")
+    public void deactivate(@PathVariable long id) {
+        service.deactivate(id);
     }
 }
