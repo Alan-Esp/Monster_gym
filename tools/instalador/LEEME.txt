@@ -1,0 +1,44 @@
+﻿MONSTER GYM - INSTALACIÓN
+=========================
+
+Antes de instalar (una sola vez en la PC del gimnasio)
+------------------------------------------------------
+1. Lector de huella U.are.U 4500: instala el "DigitalPersona One Touch for Windows RTE"
+   (el mismo que en la PC de desarrollo) y conecta el lector por USB.
+2. Impresora PT-210: emparéjala por Bluetooth y agrégala en Windows como impresora
+   "PT-210" con el controlador "Generic / Text Only" (ver docs/reglas-negocio.md, Tickets).
+
+Instalar
+--------
+1. Descomprime todo este .zip (por ejemplo en el Escritorio).
+2. Doble clic en INSTALAR.bat.
+3. Se abre la ventana de Monster Gym: crea la cuenta del administrador (el dueño).
+4. Desde ahí, en Admin > Empleados das de alta a Recepción y Entrenadores,
+   y en Admin > Configuración revisas el nombre de la impresora y el lector.
+
+Uso diario
+----------
+- La app arranca sola al iniciar sesión en Windows (sin ventanas).
+- Se abre con el acceso directo "Monster Gym" del escritorio o del menú Inicio.
+- Respaldo automático todos los días a las 23:30 (y al prender la PC si ese día no hubo).
+  Están en C:\MonsterGym\datos\respaldos. Descarga uno a una USB cada semana
+  desde Admin > Respaldos.
+
+Actualizar a una versión nueva
+------------------------------
+Descomprime el .zip nuevo y vuelve a abrir INSTALAR.bat. Los datos se conservan.
+
+Dónde está cada cosa
+--------------------
+C:\MonsterGym\programa   el programa (se reemplaza al actualizar)
+C:\MonsterGym\datos      base de datos (monster-gym.db), respaldos y logs. ¡No borrar!
+
+Desinstalar
+-----------
+Clic derecho en desinstalar.ps1 > "Ejecutar con PowerShell". Los datos NO se borran.
+
+Si algo falla
+-------------
+- "Monster Gym no arrancó": reinicia la PC. Si sigue, revisa el archivo más reciente
+  en C:\MonsterGym\datos\logs.
+- La app usa el puerto 8080. Si otro programa lo ocupa, no podrá arrancar.

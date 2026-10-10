@@ -23,3 +23,4 @@ Thumbs.db
 .vscode/
 
 tickets-dev/
+dist/
