@@ -448,6 +448,7 @@
         <button class="pill pill--tall" data-tab="Reportes">Reportes</button>
         <button class="pill pill--tall" data-tab="Turnos">Turnos</button>
         <button class="pill pill--tall" data-tab="Configuración">Configuración</button>
+        <button class="pill pill--tall" data-tab="Respaldos">Respaldos</button>
       </div>
 
       <div class="admin-panel is-active" data-panel="Empleados">
@@ -499,6 +500,19 @@
           <div class="setting"><div class="col" style="gap:2px"><span class="setting__label">Página de códigos</span><span class="setting__desc">Número n de ESC t n (solo si la impresora acepta acentos)</span></div><input class="input input--w120" id="cfgCodepage"></div>
           <div class="setting"><div class="col" style="gap:2px"><span class="setting__label">Juego de caracteres</span><span class="setting__desc">US-ASCII imprime sin acentos (la PT-210 no los soporta)</span></div><input class="input input--w120" id="cfgCharset"></div>
           <div class="setting"><div class="col" style="gap:2px"><span class="setting__label">Pie del ticket</span><span class="setting__desc">Última línea de todos los tickets</span></div><input class="input input--w240" id="cfgFooter"></div>
+        </div>
+      </div>
+
+      <div class="admin-panel" data-panel="Respaldos">
+        <div class="col" style="gap:12px">
+          <div class="card settings">
+            <div class="setting"><div class="col" style="gap:2px;flex:1;min-width:200px"><span class="setting__label">Respaldo automático</span><span class="setting__desc" id="backupDesc">Consultando…</span></div><button class="btn-sm" id="backupNow">Respaldar ahora</button></div>
+            <div class="setting"><div class="col" style="gap:2px;flex:1;min-width:200px"><span class="setting__label">Restaurar un respaldo</span><span class="setting__desc">Reemplaza todos los datos actuales por los del archivo. Antes se guarda una copia de la base actual. Requiere que no haya turnos abiertos.</span></div><button class="btn-sm" id="backupRestore">Elegir archivo…</button><input type="file" id="backupFile" accept=".db" hidden></div>
+          </div>
+          <div class="card card--pad-sm col" style="gap:4px">
+            <div class="section-head" style="margin-bottom:8px"><h2 class="h2">Respaldos guardados</h2><span class="muted" style="font-size:12px">Descarga una copia a una USB o a la nube</span></div>
+            <div id="backupsList"></div>
+          </div>
         </div>
       </div>
     </section>

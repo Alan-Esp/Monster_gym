@@ -637,8 +637,10 @@
       const n = data.counts[FILTERS[l] || 'todos'];
       return `<button class="pill pill--tall${l === memberFilter ? ' is-active' : ''}" data-filter-pick="${l}">${l}<span class="pill__count">${n}</span></button>`;
     }).join('');
+    const isAdmin = currentUser && currentUser.role === 'administrador';
     $('#membersTable').innerHTML = data.items.length ? data.items.map(m => {
       const k = STATUS_K[m.status];
+      const charge = `<button class="btn-sm" data-go="caja" data-member-id="${m.id}"${isAdmin ? ' style="padding:0 10px"' : ''}>Cobrar</button>`;
       return `
       <div class="table__row cols-socios">
         <span class="cell-person"><span class="avatar">${esc(initials(m.fullName))}</span><span class="ellipsis">${esc(m.fullName)}</span></span>
@@ -647,11 +649,31 @@
         <span class="cell-soft">${esc(m.plan || '—')}</span>
         <span class="cell-mono" style="color:var(--muted-2)">${fmtDay(m.validUntil)}</span>
         <span><span class="chip chip--${k}">${STATUS[k]}</span></span>
-        <button class="btn-sm" data-go="caja" data-member-id="${m.id}">Cobrar</button>
+        ${isAdmin
+          ? `<span class="row" style="gap:4px;justify-content:flex-end">${charge}<button class="btn-sm t-v" style="width:30px;padding:0" data-remove-member="${m.id}" title="Dar de baja" aria-label="Dar de baja">✕</button></span>`
+          : charge}
       </div>`;
     }).join('') : '<div class="empty">No se encontraron socios</div>';
     $('#membersCount').textContent = data.total;
   }
+
+  /* Baja lógica (solo Administrador): deja de aparecer y de entrar; sus pagos y visitas se conservan */
+  $('#membersTable').addEventListener('click', async e => {
+    const btn = e.target.closest('[data-remove-member]');
+    if (!btn) return;
+    const m = shownMembers.get(Number(btn.dataset.removeMember));
+    if (!m || !confirm(`¿Dar de baja a ${m.fullName} (#${m.number})?\n\n`
+      + 'Ya no aparecerá en Socios ni podrá registrar entradas, y se borrará su huella.\n'
+      + 'Sus pagos y visitas se conservan en el historial.')) return;
+    btn.disabled = true;
+    try {
+      await API.members.remove(m.id);
+      loadMembers();
+    } catch (err) {
+      btn.disabled = false;
+      if (err.status !== 401) alert(err.message);
+    }
+  });
 
   /* ---------- Visitas ---------- */
   async function loadVisits() {
@@ -1091,13 +1113,14 @@
   async function loadAdmin() {
     if (!currentUser || currentUser.role !== 'administrador') { go('inicio'); return; }
     try {
-      const [emps, planList, summary, months, cfg, shiftList] = await Promise.all([API.employees.list(),
-        API.plans.list(), API.reports.summary(), API.reports.incomeMonthly(6), API.settings.get(), API.shifts.history()]);
+      const [emps, planList, summary, months, cfg, shiftList, backupList] = await Promise.all([API.employees.list(),
+        API.plans.list(), API.reports.summary(), API.reports.incomeMonthly(6), API.settings.get(), API.shifts.history(),
+        API.backups.list()]);
       employees = emps;
       plans = planList;
       settings = cfg;
       editingEmployee = editingPlan = null;
-      renderAdmin({ employees, plans, summary, months, settings, shifts: shiftList });
+      renderAdmin({ employees, plans, summary, months, settings, shifts: shiftList, backups: backupList });
     } catch (err) {
       if (err.status !== 401) alert(err.message);
     }
@@ -1110,7 +1133,74 @@
     renderReports(d.summary, d.months);
     renderShifts(d.shifts);
     renderSettings(d.settings);
+    renderBackups(d.backups);
   }
+
+  /* ----- Respaldos: uno diario automático; descarga y restauración ----- */
+  const fmtSize = bytes => bytes < 1024 * 1024
+    ? Math.max(1, Math.round(bytes / 1024)) + ' KB' : (bytes / 1024 / 1024).toFixed(1) + ' MB';
+
+  /* b: respuesta de GET /api/backups */
+  function renderBackups(b) {
+    $('#backupDesc').textContent = `Todos los días a las 23:30 y al abrir el sistema si ese día no hay uno. `
+      + `Se conservan los últimos ${b.keepDays}. Carpeta: ${b.dir}`;
+    $('#backupsList').innerHTML = !b.items.length ? '<div class="empty">Aún no hay respaldos</div>' : b.items.map(f => `
+      <div class="list-row" style="padding:10px 0">
+        <span class="mono" style="font-size:12px;color:var(--muted);flex-shrink:0">${fmtDay(f.createdAt.slice(0, 10))} · ${f.createdAt.slice(11, 16)}</span>
+        <span class="ellipsis" style="flex:1">${esc(f.name)}${f.kind === 'antes_de_restaurar' ? ' <span class="muted">(antes de restaurar)</span>' : ''}</span>
+        <span class="mono muted">${fmtSize(f.sizeBytes)}</span>
+        <a class="btn-sm" href="${API.backups.downloadUrl(f.name)}" download="${esc(f.name)}" style="display:inline-flex;align-items:center;text-decoration:none">Descargar</a>
+      </div>`).join('');
+  }
+
+  async function loadBackups() {
+    try {
+      renderBackups(await API.backups.list());
+    } catch (err) {
+      if (err.status !== 401) $('#backupsList').innerHTML = `<div class="empty">${esc(err.message)}</div>`;
+    }
+  }
+
+  $('#backupNow').addEventListener('click', async e => {
+    const btn = e.target, label = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = 'Respaldando…';
+    try {
+      const f = await API.backups.create();
+      alert(`Respaldo creado: ${f.name} (${fmtSize(f.sizeBytes)}).`);
+    } catch (err) {
+      if (err.status !== 401) alert(err.message);
+    } finally {
+      btn.disabled = false;
+      btn.textContent = label;
+      loadBackups();
+    }
+  });
+
+  $('#backupRestore').addEventListener('click', () => $('#backupFile').click());
+  $('#backupFile').addEventListener('change', async e => {
+    const input = e.target, file = input.files[0];
+    input.value = '';  // permite elegir el mismo archivo otra vez
+    if (!file) return;
+    const word = prompt(`Vas a restaurar "${file.name}".\n\n`
+      + 'TODOS los datos actuales (socios, cobros, ventas, turnos y empleados) se reemplazarán por los del respaldo. '
+      + 'Lo registrado después de ese respaldo se perderá (queda una copia "antes de restaurar").\n\n'
+      + 'Escribe RESTAURAR para continuar:');
+    if (word === null) return;
+    const btn = $('#backupRestore'), label = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = 'Restaurando…';
+    try {
+      const r = await API.backups.restore(file, word);
+      alert(`Respaldo restaurado.\nLa base anterior quedó guardada como ${r.safetyBackup}.\n\nVuelve a iniciar sesión.`);
+      location.reload();
+    } catch (err) {
+      if (err.status !== 401) alert(err.fields && err.fields.confirm ? err.fields.confirm : err.message);
+    } finally {
+      btn.disabled = false;
+      btn.textContent = label;
+    }
+  });
 
   /* ----- Turnos: historial de cortes con reimpresión del ticket de cierre ----- */
   function renderShifts(list) {

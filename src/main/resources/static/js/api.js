@@ -21,7 +21,9 @@
 
   async function request(method, url, body, retried) {
     const headers = { Accept: 'application/json' };
-    if (body !== undefined) headers['Content-Type'] = 'application/json';
+    // FormData (subir archivos): el navegador pone el Content-Type multipart con su boundary
+    const isForm = body instanceof FormData;
+    if (body !== undefined && !isForm) headers['Content-Type'] = 'application/json';
     if (method !== 'GET') {
       const token = csrfToken();
       if (token) headers['X-XSRF-TOKEN'] = token;
@@ -33,7 +35,7 @@
         method,
         headers,
         credentials: 'same-origin',
-        body: body === undefined ? undefined : JSON.stringify(body)
+        body: body === undefined || isForm ? body : JSON.stringify(body)
       });
     } catch (e) {
       throw new ApiError(0, 'SIN_CONEXION', 'No se pudo conectar con el servidor.');
@@ -109,7 +111,22 @@
       },
       get: id => request('GET', '/api/members/' + encodeURIComponent(id)),
       create: data => request('POST', '/api/members', data),
-      update: (id, data) => request('PUT', '/api/members/' + encodeURIComponent(id), data)
+      update: (id, data) => request('PUT', '/api/members/' + encodeURIComponent(id), data),
+      // Baja lógica (solo Administrador): sus pagos y visitas se conservan
+      remove: id => request('DELETE', '/api/members/' + encodeURIComponent(id))
+    },
+    // Solo Administrador. La descarga es un enlace normal a downloadUrl(name)
+    backups: {
+      list: () => request('GET', '/api/backups'),
+      create: () => request('POST', '/api/backups'),
+      downloadUrl: name => '/api/backups/' + encodeURIComponent(name),
+      // confirm debe ser RESTAURAR; al terminar el servidor cierra la sesión
+      restore: (file, confirm) => {
+        const form = new FormData();
+        form.append('file', file);
+        form.append('confirm', confirm);
+        return request('POST', '/api/backups/restore', form);
+      }
     },
     plans: {
       list: () => request('GET', '/api/plans'),
