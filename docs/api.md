@@ -44,6 +44,7 @@ Respuesta:
 | POST /api/members | A, R | { fullName, phone, notes, planId? , method?, fingerprintEnrollmentId? } si trae plan, también cobra |
 | GET /api/members/{id} | todos | Datos, vigencia, historial de pagos y visitas |
 | PUT /api/members/{id} | A, R | Editar datos |
+| DELETE /api/members/{id} | A | Baja lógica (204). Socio inexistente o ya dado de baja: 404 |
 
 Ítem de lista: { id, number, fullName, phone, plan, validUntil, status }.
 Respuesta de la lista: { items, total, page, pageSize (50), registered, counts: { todos, activa, por_vencer, vencida } }.
@@ -100,6 +101,10 @@ GET /api/visits (date por defecto hoy) responde
 | GET/PUT /api/settings | A | gymName, capacity, warnDays, manualAccess, sound, insideMinutes, fingerprintEnabled |
 | GET /api/reports/income-monthly?months=6 | A | [{ month, label, membershipsCents, fridgeCents, totalCents, current }] |
 | GET /api/reports/summary | A | { activeMembers, newThisMonth, renewalRate, expiredLast30Days } |
+| GET /api/backups | A | { dir, keepDays, items: [{ name, sizeBytes, createdAt, kind: diario o antes_de_restaurar }] } |
+| POST /api/backups | A | Respalda ahora (201, reemplaza el del día) → { name, sizeBytes, createdAt, kind } |
+| GET /api/backups/{name} | A | Descarga el archivo (solo nombres de respaldo generados por la app; si no, 404) |
+| POST /api/backups/restore | A | multipart: file + confirm = RESTAURAR → { restoredFrom, safetyBackup }; cierra la sesión |
 
 - /api/employees: GET lista { id, name, username, role, shiftLabel, active, locked }; POST { name, username, role, shiftLabel, pin };
   PUT /{id} { name, username, role, shiftLabel, active }; PUT /{id}/pin { pin } (también quita el bloqueo).
@@ -107,6 +112,9 @@ GET /api/visits (date por defecto hoy) responde
   Un empleado desactivado pierde su sesión en la siguiente petición.
 - PUT /api/settings actualiza solo los campos enviados. Rangos: capacity 1-2000, warnDays 0-30, insideMinutes 15-600.
 - renewalRate: de los socios cuya membresía venció en los últimos 30 días, % que hoy está vigente (null si no hay).
+- Restaurar: 422 VALIDACION (campo confirm) sin la palabra; 409 TURNO_ABIERTO con algún turno abierto;
+  422 RESPALDO_INVALIDO si el archivo no es una base de Monster Gym sana o es de una versión más nueva;
+  422 RESTAURACION_FALLIDA si falló al aplicar (la base queda como estaba).
 
 ## Impresión de tickets (Fase 5B)
 | Método y ruta | Roles | Descripción |

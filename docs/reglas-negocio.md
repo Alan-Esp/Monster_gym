@@ -36,6 +36,8 @@ Estas son las decisiones por defecto. Si cambian, se actualiza este archivo prim
 - La búsqueda ignora mayúsculas, acentos y espacios; busca por nombre, número de socio o teléfono.
 - Una membresía nueva se puede capturar desde "Nuevo socio": el socio se registra y se abre Caja con el socio y el plan elegidos.
 - Un pago solo se puede cancelar mientras su turno siga abierto (un turno cerrado no se modifica).
+- Baja de socio (solo Administrador): baja lógica (active = 0), nunca se borra. Deja de aparecer en búsquedas, conteos,
+  acceso y cobro; se borran su plantilla de huella y la fecha de consentimiento. Sus pagos y visitas se conservan.
 
 
 ## Acceso y visitas
@@ -136,6 +138,8 @@ Estas son las decisiones por defecto. Si cambian, se actualiza este archivo prim
 | Reimprimir ticket de cobro | Sí | Sí | No |
 | Reimprimir ticket de cierre y probar impresora | Sí | No | No |
 | Admin: empleados, precios, configuración, ingresos por mes | Sí | No | No |
+| Dar de baja socios | Sí | No | No |
+| Respaldos: descargar y restaurar la base | Sí | No | No |
 
 ## Autenticación
 - Login por empleado con PIN o contraseña, guardado con BCrypt.
@@ -156,3 +160,15 @@ Estas son las decisiones por defecto. Si cambian, se actualiza este archivo prim
   Recepción conectada más reciente). Socio vencido: se registra como vencida y se muestra la alerta roja.
   Si el mismo socio ya entró hace menos de 5 minutos, no se crea otra visita: se avisa "ya registró entrada".
 - Admin > Configuración > Lector de huella (setting.fingerprint_enabled) apaga o enciende el lector.
+
+## Respaldos de la base de datos
+- Respaldo automático diario a las 23:30 (app.backup.cron) y al arrancar la app si ese día todavía no hay uno
+  (la PC pudo estar apagada a esa hora). Copia consistente con VACUUM INTO, aunque la app esté en uso.
+- Un archivo por día: respaldos/monster-gym-AAAA-MM-DD.db. Respaldar otra vez el mismo día lo reemplaza.
+  Se conservan los últimos 30 (MONSTER_BACKUP_KEEP_DAYS). La carpeta se cambia con MONSTER_BACKUP_DIR
+  (p. ej. una USB o una carpeta sincronizada con la nube).
+- Admin > Respaldos: respaldar ahora, descargar cualquier respaldo y restaurar uno desde un archivo.
+- Restaurar reemplaza TODOS los datos. Solo el Administrador, sin turnos abiertos y escribiendo RESTAURAR.
+  El archivo debe ser una base SQLite sana de Monster Gym, de esta versión o anterior (si es anterior se le aplican
+  las migraciones). Antes de reemplazar se guarda la base actual como antes-de-restaurar-AAAA-MM-DD-HHMMSS.db
+  (se conservan las últimas 5); si algo falla se regresa a ella. Al terminar se cierra la sesión de quien restauró.
