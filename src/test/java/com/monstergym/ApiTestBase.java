@@ -52,6 +52,9 @@ public abstract class ApiTestBase {
         registry.add("app.printer.retry-delays-ms", () -> "20");
         // Ni el lector de huella real
         registry.add("app.fingerprint.mode", () -> "fake");
+        // Respaldos en una carpeta propia de la corrida; sin respaldo automático al arrancar
+        registry.add("app.backup.dir", () -> DB.getParent().resolve(DB.getFileName() + "-respaldos").toString());
+        registry.add("app.backup.on-startup", () -> "false");
     }
 
     @BeforeEach

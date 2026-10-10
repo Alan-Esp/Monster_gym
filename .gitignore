@@ -7,6 +7,7 @@ target/
 *.db
 *.db-wal
 *.db-shm
+respaldos/
 backups/
 
 .env
