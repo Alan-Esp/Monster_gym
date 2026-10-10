@@ -64,6 +64,11 @@
     login: (username, pin) => request('POST', '/api/auth/login', { username, pin }),
     logout: () => request('POST', '/api/auth/logout'),
     me: () => request('GET', '/api/me'),
+    // Primer arranque: { needsAdmin }; createAdmin({ name, username, pin }) crea al dueño e inicia sesión
+    setup: {
+      status: () => request('GET', '/api/setup'),
+      createAdmin: data => request('POST', '/api/setup/admin', data)
+    },
     shifts: {
       open: openingCashCents => request('POST', '/api/shifts/open', { openingCashCents }),
       current: () => request('GET', '/api/shifts/current'),

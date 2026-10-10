@@ -74,7 +74,7 @@
     loadPlans();
     if (!me.shift && canOpenShift(me)) {
       // El Administrador puede entrar sin turno (p. ej. para restaurar un respaldo); no podrá cobrar ni vender
-      $('#skipShift').hidden = me.role !== 'administrador';
+      $('#skipShift').style.display = me.role === 'administrador' ? '' : 'none';
       showGate('apertura');
       return;
     }
@@ -110,6 +110,39 @@
       btn.disabled = false;
     }
   });
+  /* Primer arranque: crea el administrador y entra con su sesión */
+  function showSetup(on) {
+    $('#setupForm').style.display = on ? '' : 'none';
+    $('#loginForm').style.display = on ? 'none' : '';
+  }
+  $('#setupForm').addEventListener('input', e => e.target.setCustomValidity(''));
+  $('#setupForm').addEventListener('submit', async e => {
+    e.preventDefault();
+    const pin2 = $('#setupPin2');
+    if ($('#setupPin').value !== pin2.value) {
+      pin2.setCustomValidity('Las contraseñas no coinciden.');
+      pin2.reportValidity();
+      return;
+    }
+    const btn = $('#setupForm [type="submit"]');
+    btn.disabled = true;
+    try {
+      const me = await API.setup.createAdmin({ name: $('#setupName').value.trim(),
+        username: $('#setupUser').value.trim(), pin: $('#setupPin').value });
+      $('#setupForm').reset();
+      showSetup(false);
+      enterApp(me);
+    } catch (err) {
+      const field = err.fields && Object.keys(err.fields)[0];
+      const input = { name: '#setupName', username: '#setupUser', pin: '#setupPin' }[field] || '#setupName';
+      $(input).setCustomValidity(field ? err.fields[field] : err.message);
+      $(input).reportValidity();
+      if (err.code === 'YA_CONFIGURADO') showSetup(false);
+    } finally {
+      btn.disabled = false;
+    }
+  });
+
   $('[data-login]').addEventListener('click', () =>
     showLoginError('El acceso con huella estará disponible cuando se conecte el lector.'));
 
@@ -1542,6 +1575,8 @@
   renderDenoms();
   bindSelections();
 
-  // Si ya hay sesión entra directo; si no, el 401 deja visible el login
-  API.me().then(enterApp).catch(() => {});
+  // Si ya hay sesión entra directo; si no, el 401 deja visible el login (o la creación del administrador)
+  API.me().then(enterApp).catch(() => API.setup.status().then(s => {
+    showSetup(s.needsAdmin);
+  }).catch(() => {}));
 })();

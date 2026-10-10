@@ -16,6 +16,8 @@
 | POST /api/auth/login | público | { username, pin } |
 | POST /api/auth/logout | todos | |
 | GET /api/me | todos | { name, initials, role, shift: {id, openedAt} o null } |
+| GET /api/setup | sin sesión | { needsAdmin }: true si no existe ningún administrador activo (primer arranque) |
+| POST /api/setup/admin | sin sesión | { name, username, pin } crea el primer administrador e inicia sesión (como login). Si ya hay uno: 409 YA_CONFIGURADO |
 | POST /api/shifts/open | A, R | { openingCashCents } |
 | GET /api/shifts/current | A, R | Turno abierto y resumen del corte parcial |
 | POST /api/shifts/close | A, R | { countedCashCents } devuelve el corte final |

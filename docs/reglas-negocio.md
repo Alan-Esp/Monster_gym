@@ -147,7 +147,9 @@ Estas son las decisiones por defecto. Si cambian, se actualiza este archivo prim
 - Login por empleado con PIN o contraseña, guardado con BCrypt.
 - Sesión por cookie HttpOnly con protección CSRF.
 - Bloqueo temporal tras 5 intentos fallidos seguidos.
-- El administrador inicial se crea con una variable de entorno, nunca en el código.
+- Primer arranque (PC nueva, sin ningún administrador activo): la app muestra "Crea el administrador" en lugar del
+  login y crea al dueño con el nombre, usuario y PIN que capture. Solo funciona mientras no exista ningún
+  administrador activo. También se puede crear con MONSTER_ADMIN_USERNAME y MONSTER_ADMIN_PIN. Nunca en el código.
 
 ## Huella digital (Fase 6)
 - Se guarda solo la plantilla (template) de la huella, nunca la imagen. Es el formato propio del SDK de

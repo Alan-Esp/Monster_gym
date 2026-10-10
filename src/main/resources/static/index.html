@@ -32,6 +32,19 @@
         <div class="or"><span>o</span></div>
         <button class="btn btn--secondary btn--block" type="button" data-login>Entrar con huella</button>
       </form>
+      <!-- Primer arranque en una PC nueva: se muestra en lugar del login mientras no exista ningún administrador -->
+      <form class="login__form" id="setupForm" autocomplete="off" style="display:none">
+        <div class="page-head__titles">
+          <span class="eyebrow eyebrow--date">PRIMER ARRANQUE</span>
+          <h1 class="h1">Crea el administrador.</h1>
+          <span class="muted" style="font-size:13px">Es la cuenta del dueño. Después se agregan los demás empleados en Admin &gt; Empleados.</span>
+        </div>
+        <label class="field"><span class="eyebrow">NOMBRE</span><input class="input" id="setupName" placeholder="Nombre completo"></label>
+        <label class="field"><span class="eyebrow">USUARIO</span><input class="input" id="setupUser" placeholder="Ej. dueno"></label>
+        <label class="field"><span class="eyebrow">CONTRASEÑA O PIN</span><input class="input" id="setupPin" type="password" placeholder="Mínimo 4 caracteres"></label>
+        <label class="field"><span class="eyebrow">REPÍTELA</span><input class="input" id="setupPin2" type="password" placeholder="••••••••"></label>
+        <button class="btn btn--primary btn--lg btn--block" type="submit">Crear y entrar</button>
+      </form>
     </div>
   </div>
 </section>
@@ -83,7 +96,7 @@
       </div>
     </div>
     <button class="btn btn--primary btn--xl btn--block" id="openShift">Abrir turno</button>
-    <button class="btn btn--secondary btn--block" id="skipShift" hidden>Entrar sin abrir turno (solo administración)</button>
+    <button class="btn btn--secondary btn--block" id="skipShift" style="display:none">Entrar sin abrir turno (solo administración)</button>
   </div>
 </section>
 

@@ -1,5 +1,8 @@
 package com.monstergym.auth;
 
+import com.monstergym.common.ApiException;
+import com.monstergym.employee.EmployeeAdminService;
+import com.monstergym.employee.EmployeeAdminService.EmployeeItem;
 import com.monstergym.shift.Shift;
 import com.monstergym.shift.ShiftRepository;
 import jakarta.servlet.http.HttpServletRequest;
@@ -7,7 +10,10 @@ import jakarta.servlet.http.HttpServletResponse;
 import jakarta.servlet.http.HttpSession;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -29,6 +35,10 @@ import java.util.stream.Collectors;
 @RequestMapping("/api")
 public class AuthController {
 
+    private static final String USERNAME_REGEX = "^\\s*[A-Za-z0-9._-]{3,30}\\s*$";
+    private static final String USERNAME_MSG = "Usuario de 3 a 30 caracteres: letras, números, punto, guion o guion bajo.";
+    private static final String PIN_MSG = "El PIN o contraseña debe tener entre 4 y 72 caracteres.";
+
     public record LoginRequest(
             @NotBlank(message = "Escribe tu usuario.") @Size(max = 64, message = "Usuario demasiado largo.")
             String username,
@@ -42,22 +52,66 @@ public class AuthController {
     public record MeResponse(String name, String initials, String role, ShiftRef shift) {
     }
 
+    public record SetupStatus(boolean needsAdmin) {
+    }
+
+    public record SetupRequest(
+            @NotBlank(message = "Escribe el nombre.") @Size(max = 60, message = "Nombre demasiado largo.") String name,
+            @NotNull(message = USERNAME_MSG) @Pattern(regexp = USERNAME_REGEX, message = USERNAME_MSG) String username,
+            @NotNull(message = PIN_MSG) @Size(min = 4, max = 72, message = PIN_MSG) String pin) {
+    }
+
     private final AuthService authService;
     private final ShiftRepository shifts;
     private final SecurityContextRepository contextRepository;
+    private final EmployeeRepository employees;
+    private final EmployeeAdminService employeeAdmin;
 
     public AuthController(AuthService authService, ShiftRepository shifts,
-                          SecurityContextRepository contextRepository) {
+                          SecurityContextRepository contextRepository, EmployeeRepository employees,
+                          EmployeeAdminService employeeAdmin) {
         this.authService = authService;
         this.shifts = shifts;
         this.contextRepository = contextRepository;
+        this.employees = employees;
+        this.employeeAdmin = employeeAdmin;
     }
 
     @PostMapping("/auth/login")
     public MeResponse login(@Valid @RequestBody LoginRequest body,
                             HttpServletRequest request, HttpServletResponse response) {
         EmployeePrincipal principal = authService.login(body.username(), body.pin());
+        startSession(principal, request, response);
+        return me(principal);
+    }
 
+    /** Primer arranque: si no hay ningún administrador activo, la app pide crearlo. */
+    @GetMapping("/setup")
+    public SetupStatus setupStatus() {
+        return new SetupStatus(!employees.existsActiveAdmin());
+    }
+
+    /**
+     * Crea el primer administrador e inicia su sesión. Solo funciona mientras no exista ningún administrador
+     * activo; después responde 409 (los demás empleados se dan de alta en Admin > Empleados).
+     */
+    @PostMapping("/setup/admin")
+    public MeResponse setupAdmin(@Valid @RequestBody SetupRequest body,
+                                 HttpServletRequest request, HttpServletResponse response) {
+        EmployeeItem created;
+        synchronized (this) {
+            if (employees.existsActiveAdmin()) {
+                throw new ApiException(HttpStatus.CONFLICT, "YA_CONFIGURADO",
+                        "El sistema ya tiene un administrador. Inicia sesión.");
+            }
+            created = employeeAdmin.create(body.name(), body.username(), Role.ADMINISTRADOR.dbValue(), null, body.pin());
+        }
+        EmployeePrincipal principal = authService.login(created.username(), body.pin());
+        startSession(principal, request, response);
+        return me(principal);
+    }
+
+    private void startSession(EmployeePrincipal principal, HttpServletRequest request, HttpServletResponse response) {
         // Evita fijación de sesión: si ya había una sesión, cambia su id
         if (request.getSession(false) != null) {
             request.changeSessionId();
@@ -68,8 +122,6 @@ public class AuthController {
         context.setAuthentication(auth);
         SecurityContextHolder.setContext(context);
         contextRepository.saveContext(context, request, response);
-
-        return me(principal);
     }
 
     @PostMapping("/auth/logout")

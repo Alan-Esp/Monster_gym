@@ -36,6 +36,9 @@ public class SecurityConfig {
                 // Cierre de las conexiones SSE de /api/fingerprint/events (la petición original ya se autorizó)
                 .dispatcherTypeMatchers(DispatcherType.ASYNC).permitAll()
                 .requestMatchers(HttpMethod.POST, "/api/auth/login").permitAll()
+                // Primer arranque: crear el administrador (el controlador lo niega si ya existe uno)
+                .requestMatchers(HttpMethod.GET, "/api/setup").permitAll()
+                .requestMatchers(HttpMethod.POST, "/api/setup/admin").permitAll()
                 .requestMatchers("/api/**").authenticated()
                 .anyRequest().permitAll())
             // Cookie XSRF-TOKEN legible por JS; el frontend la devuelve en la cabecera X-XSRF-TOKEN
