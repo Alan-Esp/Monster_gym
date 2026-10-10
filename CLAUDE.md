@@ -8,6 +8,7 @@ Corre local en una PC Windows del gimnasio, sin depender de internet.
 - docs/reglas-negocio.md : reglas del negocio, roles, turnos y caja.
 - docs/modelo-datos.md   : esquema de base de datos y convenciones.
 - docs/api.md            : endpoints, formatos y permisos.
+- docs/instalacion.md    : paquete instalable y cómo se instala en la PC del gimnasio.
 Si una instrucción mía contradice estos documentos, avísame antes de continuar.
 
 ## Stack
@@ -35,8 +36,11 @@ Si una instrucción mía contradice estos documentos, avísame antes de continua
 - La API devuelve dinero en centavos; la conversión a pesos se hace al mostrar (función money).
 
 ## Comandos
-- Correr: mvn spring-boot:run
-- Pruebas: mvn test
+- Correr (dev): .\mvnw.cmd spring-boot:run "-Dspring-boot.run.profiles=dev"
+  (lector e impresora reales: $env:MONSTER_FINGERPRINT_MODE='real'; $env:MONSTER_PRINTER_MODE='real' antes)
+- Pruebas: .\mvnw.cmd test
+- Paquete instalable: powershell -ExecutionPolicy Bypass -File tools\instalador\empaquetar.ps1 -Version 1.0.0
+  (genera dist\MonsterGym-<versión>.zip; ver docs/instalacion.md)
 
 ## Flujo de trabajo
 - Para cambios grandes: proponer un plan breve y esperar mi aprobación.
