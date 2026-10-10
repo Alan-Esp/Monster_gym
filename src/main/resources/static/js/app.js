@@ -72,10 +72,19 @@
     startFingerprint(me);
     renderUser(me);
     loadPlans();
-    if (!me.shift && canOpenShift(me)) { showGate('apertura'); return; }
+    if (!me.shift && canOpenShift(me)) {
+      // El Administrador puede entrar sin turno (p. ej. para restaurar un respaldo); no podrá cobrar ni vender
+      $('#skipShift').hidden = me.role !== 'administrador';
+      showGate('apertura');
+      return;
+    }
     showGate(null);
     go('inicio');
   }
+  $('#skipShift').addEventListener('click', () => {
+    showGate(null);
+    go('admin');
+  });
 
   function showLoginError(message) {
     const pin = $('#loginPin');

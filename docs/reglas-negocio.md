@@ -57,6 +57,8 @@ Estas son las decisiones por defecto. Si cambian, se actualiza este archivo prim
 
 ## Turnos y corte de caja
 - Un empleado abre turno con un fondo inicial en efectivo. Solo puede haber un turno abierto por empleado.
+- El Administrador puede entrar sin abrir turno ("Entrar sin abrir turno") para tareas de administración, p. ej.
+  restaurar un respaldo; así no puede cobrar ni vender. Recepción siempre abre turno al entrar.
 - Todo pago y venta queda ligado al turno abierto.
 - Al cerrar: se captura el efectivo contado. El sistema muestra efectivo esperado (fondo + cobros y ventas en efectivo) contra contado, y la diferencia.
 - Totales del corte: membresías y refri por separado, y por método de pago.
