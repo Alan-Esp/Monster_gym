@@ -46,8 +46,8 @@ public class AdminBootstrap implements ApplicationRunner {
             return false;
         }
         if (username.isEmpty() || pin.isEmpty()) {
-            log.warn("No hay ningún administrador activo. Define MONSTER_ADMIN_USERNAME y MONSTER_ADMIN_PIN "
-                    + "y reinicia la aplicación para crearlo.");
+            log.warn("No hay ningún administrador activo: créalo en la pantalla de primer arranque de la app "
+                    + "(o define MONSTER_ADMIN_USERNAME y MONSTER_ADMIN_PIN y reinicia).");
             return false;
         }
         if (pin.length() < MIN_PIN_LENGTH) {

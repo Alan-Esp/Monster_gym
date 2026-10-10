@@ -15,9 +15,16 @@ powershell -ExecutionPolicy Bypass -File tools\instalador\empaquetar.ps1 -Versio
 Requisitos en la PC de desarrollo: JDK 21+ con `jpackage` (no se necesita WiX) y los jars del SDK de huella en
 `~/.m2` (`tools\instalar-sdk-huella.bat`).
 
-## Qué hace INSTALAR.bat (sin permisos de administrador)
+El RTE del lector se toma de `-Rte` (por defecto `Downloads\SDK para Digital Persona\RTE\Install\x64\Setup.msi`)
+y va en `huella\` dentro del zip, con `AVISO.txt`. No se sube al repositorio. El EULA del SDK permite redistribuir
+el Runtime Environment incorporado a la aplicación, siempre que se incluya su aviso de copyright
+("(c) 1996-2010 DigitalPersona, Inc. All Rights Reserved."). Solo se instalan los componentes Java (sin .NET).
+Al desinstalar Monster Gym el RTE se queda (es un controlador del sistema).
+
+## Qué hace INSTALAR.bat
 | Paso | Detalle |
 |---|---|
+| Lector de huella | Si faltan el servicio DpHost o `System32\otdpfpjni.dll`, instala `huella\Setup.msi` (RTE 1.6.1 x64) con `ADDLOCAL=FpRecLibs,JavaFpRecLibs /qn /norestart`. Es el único paso que pide permiso de administrador (UAC). Código 3010 = pide reiniciar. Log en `datos\logs\instalacion-lector-huella.log` |
 | Detiene la versión anterior | Tarea "Monster Gym" y proceso `MonsterGym.exe` |
 | Copia el programa | `C:\MonsterGym\programa` (robocopy /MIR: se reemplaza completo) |
 | Fija la carpeta de datos | Agrega `-Dapp.data-dir=C:/MonsterGym/datos` a `programa\app\MonsterGym.cfg` |

@@ -23,6 +23,34 @@ Write-Host "Programa: $programa"
 Write-Host "Datos:    $datos"
 Write-Host "Usuario:  $usuario (la app arranca cuando este usuario inicia sesión)"
 
+Paso 'Lector de huella (DigitalPersona One Touch RTE)'
+# Ya instalado si existen el servicio DpHost y la DLL JNI que usa la app (también lo deja así el SDK completo)
+$reiniciar = $false
+$lectorListo = (Get-Service -Name DpHost -ErrorAction SilentlyContinue) -and
+    (Test-Path "$env:WINDIR\System32\otdpfpjni.dll")
+$rteMsi = Join-Path $PSScriptRoot 'huella\Setup.msi'
+if ($lectorListo) {
+    Write-Host 'Ya está instalado.'
+} elseif (-not (Test-Path $rteMsi)) {
+    Write-Warning 'El paquete no trae el instalador del lector. La app funcionará con acceso manual hasta instalarlo.'
+} else {
+    Write-Host 'Instalando... Windows va a pedir permiso de administrador: acepta.'
+    New-Item -ItemType Directory -Force (Join-Path $datos 'logs') | Out-Null
+    $log = Join-Path $datos 'logs\instalacion-lector-huella.log'
+    # Solo los componentes que usa la app (Java); así no hace falta .NET Framework 2.0
+    $argumentos = "/i `"$rteMsi`" ADDLOCAL=FpRecLibs,JavaFpRecLibs /qn /norestart /l*v `"$log`""
+    try {
+        $p = Start-Process msiexec.exe -ArgumentList $argumentos -Verb RunAs -Wait -PassThru
+        switch ($p.ExitCode) {
+            0 { Write-Host 'Lector de huella instalado.' }
+            3010 { Write-Host 'Lector de huella instalado. Hay que REINICIAR la PC al terminar.'; $reiniciar = $true }
+            default { Write-Warning "No se pudo instalar el lector (código $($p.ExitCode)). Revisa $log. La app funcionará con acceso manual." }
+        }
+    } catch {
+        Write-Warning 'No se dio permiso de administrador: el lector no se instaló. Vuelve a abrir INSTALAR.bat para intentarlo.'
+    }
+}
+
 Paso 'Deteniendo la versión anterior (si existe)'
 if (Get-ScheduledTask -TaskName $tarea -ErrorAction SilentlyContinue) {
     Stop-ScheduledTask -TaskName $tarea
@@ -74,3 +102,7 @@ if ($datosPrevios) {
     Write-Host 'Primera instalación: en la ventana que se abrió, crea la cuenta del administrador.'
 }
 Write-Host 'Desde ahora abre la app con el acceso directo "Monster Gym" del escritorio.'
+if ($reiniciar) {
+    Write-Host ''
+    Write-Host 'IMPORTANTE: reinicia la PC para que el lector de huella empiece a funcionar.' -ForegroundColor Yellow
+}

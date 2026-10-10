@@ -3,15 +3,17 @@
 
 Antes de instalar (una sola vez en la PC del gimnasio)
 ------------------------------------------------------
-1. Lector de huella U.are.U 4500: instala el "DigitalPersona One Touch for Windows RTE"
-   (el mismo que en la PC de desarrollo) y conecta el lector por USB.
-2. Impresora PT-210: emparéjala por Bluetooth y agrégala en Windows como impresora
-   "PT-210" con el controlador "Generic / Text Only" (ver docs/reglas-negocio.md, Tickets).
+1. Impresora PT-210: emparéjala por Bluetooth y agrégala en Windows como impresora
+   "PT-210" con el controlador "Generic / Text Only".
+2. Conecta el lector de huella U.are.U 4500 por USB. Su software (DigitalPersona RTE)
+   viene incluido: lo instala INSTALAR.bat.
 
 Instalar
 --------
 1. Descomprime todo este .zip (por ejemplo en el Escritorio).
 2. Doble clic en INSTALAR.bat.
+   La primera vez Windows pide permiso de administrador para instalar el lector de huella:
+   acepta. Si al final dice "reinicia la PC", reiníciala.
 3. Se abre la ventana de Monster Gym: crea la cuenta del administrador (el dueño).
 4. Desde ahí, en Admin > Empleados das de alta a Recepción y Entrenadores,
    y en Admin > Configuración revisas el nombre de la impresora y el lector.

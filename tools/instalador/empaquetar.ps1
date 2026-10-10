@@ -1,9 +1,13 @@
 ﻿# Genera dist\MonsterGym-<version>.zip: el programa con Java incluido y los scripts de instalación.
 # Uso (desde la raíz del proyecto):
 #   powershell -ExecutionPolicy Bypass -File tools\instalador\empaquetar.ps1 [-Version 1.0.0] [-SinPruebas]
+#   -Rte: Setup.msi de 64 bits del "One Touch for Windows RTE" (carpeta RTE\Install\x64 del SDK). Se incluye
+#   en el paquete para que INSTALAR.bat instale el lector de huella si hace falta (el EULA permite redistribuirlo
+#   con la aplicación, incluyendo su aviso de copyright).
 param(
     [string]$Version = '1.0.0',
-    [switch]$SinPruebas
+    [switch]$SinPruebas,
+    [string]$Rte = "$env:USERPROFILE\Downloads\SDK para Digital Persona\RTE\Install\x64\Setup.msi"
 )
 $ErrorActionPreference = 'Stop'
 $proyecto = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
@@ -43,6 +47,19 @@ New-Item -ItemType Directory -Force $carpeta | Out-Null
 Copy-Item (Join-Path $imagen 'MonsterGym') (Join-Path $carpeta 'MonsterGym') -Recurse -Force
 foreach ($f in 'INSTALAR.bat', 'instalar.ps1', 'abrir.ps1', 'desinstalar.ps1', 'LEEME.txt') {
     Copy-Item (Join-Path $PSScriptRoot $f) $carpeta -Force
+}
+if (Test-Path $Rte) {
+    $huella = Join-Path $carpeta 'huella'
+    New-Item -ItemType Directory -Force $huella | Out-Null
+    Copy-Item $Rte (Join-Path $huella 'Setup.msi') -Force
+    Set-Content -Path (Join-Path $huella 'AVISO.txt') -Encoding ASCII -Value @(
+        'DigitalPersona One Touch for Windows RTE 1.6.1 (64 bits)',
+        '(c) 1996-2010 DigitalPersona, Inc. All Rights Reserved.',
+        '',
+        'Componente de terceros redistribuido con Monster Gym bajo el EULA del One Touch for Windows SDK.',
+        'INSTALAR.bat lo instala solo si el lector de huella todavia no esta instalado en la PC.')
+} else {
+    Write-Warning "No se encontro el RTE del lector en '$Rte'. El paquete se genera sin el; en la PC del gimnasio habra que instalarlo a mano."
 }
 
 Write-Host '4/4 Comprimiendo...'
